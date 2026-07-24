@@ -224,16 +224,20 @@ function LaneTraffic({ row, i }: { row: Row; i: number }) {
     if (!g) return
     const game = useGame.getState()
     const t = clock.elapsedTime
-    // Casino mode: traffic politely clears the lane the frog is standing on.
-    const hide =
+    // Casino mode: the lane you're standing on is already resolved safe, so
+    // cars whimsically leap over the frog instead of hitting it.
+    const overFrog =
       row.kind === 'road' && game.mode === 'casino' && game.phase === 'playing' && game.frogRow === i
-    const target = hide ? 0.001 : 1
-    const s = THREE.MathUtils.lerp((g.userData.s as number) ?? 1, target, 0.2)
-    g.userData.s = s
     for (let k = 0; k < g.children.length; k++) {
       const item = g.children[k]
-      item.position.x = carX(row, k, t)
-      item.scale.setScalar(s)
+      const x = carX(row, k, t)
+      item.position.x = x
+      let targetY = 0
+      if (overFrog) {
+        const d = Math.abs(x - frogPos.x)
+        if (d < 1.6) targetY = (1 - (d / 1.6) ** 2) * 1.1
+      }
+      item.position.y = THREE.MathUtils.lerp(item.position.y, targetY, 0.35)
       if (row.kind === 'road') item.rotation.y = row.dir === 1 ? 0 : Math.PI
     }
   })
