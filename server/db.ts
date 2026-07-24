@@ -1,0 +1,136 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { STARTING_BALANCE } from '../shared/casino.ts'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const DATA_DIR = process.env.DATA_DIR || join(__dirname, '..', 'data')
+const DB_PATH = join(DATA_DIR, 'casino.json')
+
+export interface Player {
+  id: string
+  token: string
+  balance: number
+  createdAt: string
+  updatedAt: string
+}
+
+export type RoundStatus = 'active' | 'cashed' | 'dead'
+
+export interface Round {
+  id: string
+  playerId: string
+  bet: number
+  worldSeed: number
+  fairSeed: number
+  fairHash: string
+  status: RoundStatus
+  frogRow: number
+  maxRow: number
+  multiplier: number
+  lanesCleared: number
+  rolled: Record<string, boolean>
+  deathKind?: 'hit' | 'drown'
+  payout: number
+  createdAt: string
+  settledAt?: string
+}
+
+interface DbShape {
+  players: Record<string, Player>
+  rounds: Record<string, Round>
+  history: string[] // recent round ids, newest first
+}
+
+function empty(): DbShape {
+  return { players: {}, rounds: {}, history: [] }
+}
+
+function load(): DbShape {
+  try {
+    if (!existsSync(DB_PATH)) return empty()
+    return { ...empty(), ...JSON.parse(readFileSync(DB_PATH, 'utf8')) }
+  } catch {
+    return empty()
+  }
+}
+
+let db = load()
+let dirty = false
+let flushTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleSave() {
+  dirty = true
+  if (flushTimer) return
+  flushTimer = setTimeout(() => {
+    flushTimer = null
+    if (!dirty) return
+    mkdirSync(DATA_DIR, { recursive: true })
+    writeFileSync(DB_PATH, JSON.stringify(db, null, 2))
+    dirty = false
+  }, 200)
+}
+
+export function saveNow() {
+  if (flushTimer) {
+    clearTimeout(flushTimer)
+    flushTimer = null
+  }
+  mkdirSync(DATA_DIR, { recursive: true })
+  writeFileSync(DB_PATH, JSON.stringify(db, null, 2))
+  dirty = false
+}
+
+export function getPlayerByToken(token: string): Player | null {
+  return Object.values(db.players).find((p) => p.token === token) ?? null
+}
+
+export function createPlayer(id: string, token: string): Player {
+  const now = new Date().toISOString()
+  const player: Player = {
+    id,
+    token,
+    balance: STARTING_BALANCE,
+    createdAt: now,
+    updatedAt: now,
+  }
+  db.players[id] = player
+  scheduleSave()
+  return player
+}
+
+export function updatePlayer(player: Player) {
+  player.updatedAt = new Date().toISOString()
+  db.players[player.id] = player
+  scheduleSave()
+}
+
+export function getRound(id: string): Round | null {
+  return db.rounds[id] ?? null
+}
+
+export function getActiveRound(playerId: string): Round | null {
+  return (
+    Object.values(db.rounds).find((r) => r.playerId === playerId && r.status === 'active') ?? null
+  )
+}
+
+export function saveRound(round: Round) {
+  db.rounds[round.id] = round
+  if (round.status !== 'active') {
+    db.history = [round.id, ...db.history.filter((id) => id !== round.id)].slice(0, 200)
+  }
+  scheduleSave()
+}
+
+export function recentRounds(playerId: string, limit = 20): Round[] {
+  return db.history
+    .map((id) => db.rounds[id])
+    .filter((r): r is Round => !!r && r.playerId === playerId)
+    .slice(0, limit)
+}
+
+export function refillPlayer(player: Player) {
+  player.balance = STARTING_BALANCE
+  updatePlayer(player)
+}

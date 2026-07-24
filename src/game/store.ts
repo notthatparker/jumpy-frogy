@@ -1,23 +1,20 @@
 import { create } from 'zustand'
-import { generateRows, mulberry32, P_SURVIVE, STEP_MULT, type Row } from './world'
+import { generateRows, STEP_MULT, type DeathKind, type Row } from './world'
 import { sfx } from './sfx'
+import { api, ApiError } from './api'
 
 export { STEP_MULT }
 
 export type Phase = 'idle' | 'playing' | 'dead' | 'cashed'
 export type Mode = 'arcade' | 'casino'
-export type DeathKind = 'hit' | 'drown'
 
 export interface Doom {
   row: number
   kind: DeathKind
-  at: number // performance.now() / 1000 at roll time
+  at: number
 }
 
-async function sha256Hex(msg: string): Promise<string> {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(msg))
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('')
-}
+const TOKEN_KEY = 'jf_session_token'
 
 interface GameState {
   balance: number
@@ -37,13 +34,83 @@ interface GameState {
   fairSeed: number
   fairHash: string
   fairRevealed: boolean
+  token: string | null
+  roundId: string | null
+  backend: 'online' | 'offline' | 'connecting'
+  busy: boolean
   setBet: (b: number) => void
   setMode: (m: Mode) => void
+  boot: () => Promise<void>
   start: () => void
   advanceTo: (row: number) => void
   die: (kind?: DeathKind) => void
   cashOut: () => void
   resetBalance: () => void
+}
+
+function errMsg(err: unknown, fallback: string) {
+  if (err instanceof ApiError) return String((err.body as { error?: string })?.error || err.message)
+  return fallback
+}
+
+function applyServerRound(
+  set: (p: Partial<GameState>) => void,
+  get: () => GameState,
+  data: {
+    balance: number
+    round: {
+      id: string
+      worldSeed: number
+      fairHash: string
+      fairSeed: number | null
+      status: string
+      frogRow: number
+      maxRow: number
+      multiplier: number
+      lanesCleared: number
+      deathKind: DeathKind | null
+      payout: number
+    }
+    doom?: { row: number; kind: DeathKind } | null
+    ding?: boolean
+  },
+) {
+  const r = data.round
+  const prev = get()
+  if (data.ding && r.multiplier > prev.multiplier) sfx.ding()
+
+  const patch: Partial<GameState> = {
+    balance: data.balance,
+    roundId: r.id,
+    seed: r.worldSeed,
+    rows: generateRows(r.worldSeed),
+    frogRow: r.frogRow,
+    maxRow: r.maxRow,
+    multiplier: r.multiplier,
+    roadsCrossed: r.lanesCleared,
+    fairHash: r.fairHash,
+    fairSeed: r.fairSeed ?? prev.fairSeed,
+    fairRevealed: r.fairSeed != null,
+  }
+
+  if (data.doom) {
+    sfx.horn()
+    patch.doom = { row: data.doom.row, kind: data.doom.kind, at: performance.now() / 1000 }
+  }
+
+  if (r.status === 'cashed') {
+    sfx.cash()
+    patch.phase = 'cashed'
+    patch.message = `Cashed out +${r.payout.toFixed(2)} coins (x${r.multiplier.toFixed(2)})`
+    patch.doom = null
+  } else if (r.status === 'dead') {
+    // Keep playing until the doom animation calls die().
+    patch.phase = 'playing'
+  } else {
+    patch.phase = 'playing'
+  }
+
+  set(patch)
 }
 
 export const useGame = create<GameState>((set, get) => ({
@@ -64,6 +131,10 @@ export const useGame = create<GameState>((set, get) => ({
   fairSeed: 0,
   fairHash: '',
   fairRevealed: false,
+  token: typeof localStorage !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null,
+  roundId: null,
+  backend: 'connecting',
+  busy: false,
 
   setBet: (b) => set({ bet: Math.max(1, Math.min(500, Math.round(b))) }),
 
@@ -71,14 +142,59 @@ export const useGame = create<GameState>((set, get) => ({
     if (get().phase !== 'playing') set({ mode: m })
   },
 
+  boot: async () => {
+    set({ backend: 'connecting' })
+    let lastErr: unknown
+    for (let attempt = 0; attempt < 8; attempt++) {
+      try {
+        const session = await api.session(get().token || undefined)
+        localStorage.setItem(TOKEN_KEY, session.token)
+        set({
+          token: session.token,
+          balance: session.balance,
+          backend: 'online',
+          message: null,
+        })
+        return
+      } catch (err) {
+        lastErr = err
+        await new Promise((r) => setTimeout(r, 250 * (attempt + 1)))
+      }
+    }
+    console.warn('casino boot failed', lastErr)
+    set({
+      backend: 'offline',
+      message: 'Casino server offline — use Arcade, or run npm run dev',
+    })
+  },
+
   start: () => {
-    const { balance, bet, phase } = get()
-    if (phase === 'playing' || bet > balance) return
+    const s = get()
+    if (s.phase === 'playing' || s.busy || s.bet > s.balance) return
+
+    if (s.mode === 'casino') {
+      if (s.backend !== 'online' || !s.token) {
+        set({ message: 'Casino server offline — start with npm run dev, or switch to Arcade' })
+        return
+      }
+      set({ busy: true, message: null })
+      sfx.click()
+      void api
+        .start(s.token, s.bet)
+        .then((res) => {
+          applyServerRound(set, get, res)
+          set({ busy: false, doom: null, rolled: {}, deathKind: 'hit', message: null, phase: 'playing' })
+        })
+        .catch((err: unknown) => {
+          set({ busy: false, message: `Could not start round: ${errMsg(err, 'start_failed')}` })
+        })
+      return
+    }
+
     const seed = (Math.random() * 2 ** 31) | 0
-    const fairSeed = (Math.random() * 2 ** 31) | 0
     sfx.click()
     set({
-      balance: +(balance - bet).toFixed(2),
+      balance: +(s.balance - s.bet).toFixed(2),
       phase: 'playing',
       multiplier: 1,
       roadsCrossed: 0,
@@ -89,91 +205,103 @@ export const useGame = create<GameState>((set, get) => ({
       message: null,
       doom: null,
       rolled: {},
-      fairSeed,
+      fairSeed: 0,
       fairHash: '',
       fairRevealed: false,
-    })
-    // Commit to the outcome seed before the round is played.
-    void sha256Hex(String(fairSeed)).then((h) => {
-      if (get().fairSeed === fairSeed) set({ fairHash: h })
+      roundId: null,
     })
   },
 
   advanceTo: (row) => {
     const s = get()
-    if (s.phase !== 'playing' || s.doom) return
-    let { maxRow, multiplier, roadsCrossed } = s
-    let doom: Doom | null = s.doom
-    const rolled = { ...s.rolled }
+    if (s.phase !== 'playing' || s.doom || s.busy) return
 
+    if (s.mode === 'casino' && s.token && s.roundId) {
+      set({ busy: true })
+      void api
+        .advance(s.token, s.roundId, row)
+        .then((res) => {
+          applyServerRound(set, get, res)
+          set({ busy: false })
+        })
+        .catch((err: unknown) => {
+          set({ busy: false, message: `Server rejected hop: ${errMsg(err, 'advance_failed')}` })
+        })
+      return
+    }
+
+    let { maxRow, multiplier, roadsCrossed } = s
     if (row > maxRow) {
       for (let r = maxRow + 1; r <= row; r++) {
-        const kind = s.rows[r]?.kind
-        if (s.mode === 'casino') {
-          // Chance-based: outcome of each hazard lane is decided by the
-          // committed fair seed the moment you land on it.
-          if (kind && kind !== 'grass' && rolled[r] === undefined) {
-            const roll = mulberry32((s.fairSeed ^ Math.imul(r, 2654435761)) | 0)()
-            if (roll < P_SURVIVE) {
-              rolled[r] = true
-              multiplier = +(multiplier * STEP_MULT).toFixed(4)
-              roadsCrossed++
-            } else {
-              rolled[r] = false
-              doom = { row: r, kind: kind === 'water' ? 'drown' : 'hit', at: performance.now() / 1000 }
-            }
-          }
-        } else {
-          // Skill-based: credit for each hazard lane you fully crossed
-          // (the lane behind you once you land).
-          const prev = s.rows[r - 1]
-          if (prev && prev.kind !== 'grass') {
-            multiplier = +(multiplier * STEP_MULT).toFixed(4)
-            roadsCrossed++
-          }
+        const prev = s.rows[r - 1]
+        if (prev && prev.kind !== 'grass') {
+          multiplier = +(multiplier * STEP_MULT).toFixed(4)
+          roadsCrossed++
         }
       }
       maxRow = row
     }
     if (multiplier > s.multiplier) sfx.ding()
-    if (doom && doom !== s.doom) sfx.horn()
-    set({ frogRow: row, maxRow, multiplier, roadsCrossed, rolled, doom })
-    if (!doom && row >= s.rows.length - 3) get().cashOut()
+    set({ frogRow: row, maxRow, multiplier, roadsCrossed })
+    if (row >= s.rows.length - 3) get().cashOut()
   },
 
   die: (kind = 'hit') => {
-    const { bet, phase } = get()
-    if (phase !== 'playing') return
+    const s = get()
+    if (s.phase === 'dead' || s.phase === 'cashed') return
     if (kind === 'drown') sfx.splash()
     else sfx.splat()
     set({
       phase: 'dead',
       deathKind: kind,
-      fairRevealed: true,
-      message: `${kind === 'drown' ? 'Splash!' : 'Splat!'} You lost ${bet.toFixed(2)} coins`,
+      fairRevealed: s.mode === 'casino' ? true : s.fairRevealed,
+      message: `${kind === 'drown' ? 'Splash!' : 'Splat!'} You lost ${s.bet.toFixed(2)} coins`,
+      busy: false,
     })
   },
 
   cashOut: () => {
-    const { phase, rows, frogRow, balance, bet, multiplier, mode, doom } = get()
-    if (phase !== 'playing' || doom) return
-    // Arcade: must be standing on safe grass. Casino: the lane you're on is
-    // already resolved, so you can cash out any time.
-    if (mode === 'arcade' && rows[frogRow]?.kind !== 'grass') return
-    const win = +(bet * multiplier).toFixed(2)
+    const s = get()
+    if (s.phase !== 'playing' || s.doom || s.busy) return
+
+    if (s.mode === 'casino' && s.token && s.roundId) {
+      set({ busy: true })
+      void api
+        .cashout(s.token, s.roundId)
+        .then((res) => {
+          applyServerRound(set, get, res)
+          set({ busy: false })
+        })
+        .catch((err: unknown) => {
+          set({ busy: false, message: `Cash out failed: ${errMsg(err, 'cashout_failed')}` })
+        })
+      return
+    }
+
+    if (s.rows[s.frogRow]?.kind !== 'grass') return
+    const win = +(s.bet * s.multiplier).toFixed(2)
     sfx.cash()
     set({
       phase: 'cashed',
-      balance: +(balance + win).toFixed(2),
+      balance: +(s.balance + win).toFixed(2),
       fairRevealed: true,
-      message: `Cashed out +${win.toFixed(2)} coins (x${multiplier.toFixed(2)})`,
+      message: `Cashed out +${win.toFixed(2)} coins (x${s.multiplier.toFixed(2)})`,
     })
   },
 
-  resetBalance: () => set({ balance: 1000, message: 'Balance refilled (demo credits)' }),
+  resetBalance: () => {
+    const s = get()
+    if (s.mode === 'casino' && s.backend === 'online' && s.token) {
+      void api
+        .refill(s.token)
+        .then((res) => set({ balance: res.balance, message: res.message }))
+        .catch(() => set({ message: 'Refill failed' }))
+      return
+    }
+    set({ balance: 1000, message: 'Balance refilled (demo credits)' })
+  },
 }))
 
-// Dev-only hook for debugging and automated testing.
 if (import.meta.env.DEV) {
   ;(window as unknown as Record<string, unknown>).__game = useGame
 }

@@ -26,6 +26,8 @@ export function HUD() {
   const fairHash = useGame((s) => s.fairHash)
   const fairSeed = useGame((s) => s.fairSeed)
   const fairRevealed = useGame((s) => s.fairRevealed)
+  const backend = useGame((s) => s.backend)
+  const busy = useGame((s) => s.busy)
   const setBet = useGame((s) => s.setBet)
   const setMode = useGame((s) => s.setMode)
   const start = useGame((s) => s.start)
@@ -34,9 +36,9 @@ export function HUD() {
 
   const onGrass = rows[frogRow]?.kind === 'grass'
   const win = bet * multiplier
-  const canStart = bet <= balance
+  const canStart = bet <= balance && !(mode === 'casino' && backend !== 'online')
   const playing = phase === 'playing'
-  const canCash = playing && !doom && (mode === 'casino' || onGrass)
+  const canCash = playing && !doom && !busy && (mode === 'casino' || onGrass)
 
   return (
     <div className="hud">
@@ -55,6 +57,10 @@ export function HUD() {
           <span className="pill-label">lanes</span>
           <span className="pill-value">{roadsCrossed}</span>
         </div>
+      </div>
+
+      <div className={`backend-pill backend-${backend}`} title="Casino backend status">
+        {backend === 'online' ? 'server online' : backend === 'connecting' ? 'connecting…' : 'server offline'}
       </div>
 
       {message && <div className={`toast ${phase === 'dead' ? 'toast-bad' : 'toast-good'}`}>{message}</div>}
@@ -93,8 +99,12 @@ export function HUD() {
             {canCash ? `CASH OUT +${win.toFixed(2)}` : doom ? '...' : 'REACH GRASS TO CASH OUT'}
           </button>
         ) : (
-          <button className="main-btn start" disabled={!canStart} onClick={blurring(start)}>
-            {phase === 'idle' ? `HOP IN (bet ${bet})` : `PLAY AGAIN (bet ${bet})`}
+          <button className="main-btn start" disabled={!canStart || busy} onClick={blurring(start)}>
+            {busy
+              ? '…'
+              : phase === 'idle'
+                ? `HOP IN (bet ${bet})`
+                : `PLAY AGAIN (bet ${bet})`}
           </button>
         )}
 

@@ -3,6 +3,11 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  // Served from https://<user>.github.io/jumpy-frogy/
-  base: '/jumpy-frogy/',
+  // Use VITE_BASE=/jumpy-frogy/ for GitHub Pages static deploys.
+  base: process.env.VITE_BASE || '/',
+  server: {
+    proxy: {
+      '/api': 'http://localhost:8787',
+    },
+  },
 })

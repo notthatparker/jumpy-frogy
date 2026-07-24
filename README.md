@@ -2,42 +2,66 @@
 
 A cozy 3D lane-crossing casino mini-game with a pastel, rounded, village look.
 Place a bet, hop across traffic and rivers — every hazard lane you survive
-multiplies your payout (x1.18 per lane). Cash out before you get unlucky, or
+multiplies your payout (×1.18 per lane). Cash out before you get unlucky, or
 lose the bet.
 
 Demo credits only — no real money.
 
 ## Modes
 
-- **Casino (default, RTP 96%)** — chance-based like crash games: each hazard
-  lane's outcome is decided by a committed RNG seed (survival chance 81.36%
-  per lane, so RTP = 0.8136 x 1.18 = 96%). The seed's SHA-256 hash is shown
-  before the round and the seed is revealed after — provably fair. Cash out
-  any time between hops.
-- **Arcade (skill)** — real dodging: physical car collisions, land on logs to
-  cross water, get carried by the current. Cash out only on grass.
+- **Casino (default, RTP 96%)** — **server-authoritative**. Balance, bets, RNG,
+  and payouts live on the backend. Each round commits a SHA-256 hash of the
+  outcome seed before play; the seed is revealed after settle (provably fair).
+- **Arcade (skill)** — client-side dodging for fun. Not for real-money play.
 
-## Stack
-
-- Vite + React + TypeScript
-- Three.js via @react-three/fiber and @react-three/drei
-- zustand for game state
-
-## Run
+## Run locally (API + game)
 
 ```bash
 npm install
 npm run dev
 ```
 
+- Web: http://localhost:5173 (proxies `/api` → backend)
+- API: http://localhost:8787
+
+## Production (one shareable URL)
+
+```bash
+npm run build
+npm start
+```
+
+Opens the API and serves the built frontend from the same origin on port 8787
+(or `$PORT`).
+
+## Casino API
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/health` | Liveness |
+| GET | `/api/config` | RTP, bet limits |
+| POST | `/api/session` | Create / resume demo player |
+| POST | `/api/round/start` | Debit bet, return `fairHash` + `worldSeed` |
+| POST | `/api/round/advance` | Authoritative hop / lane roll |
+| POST | `/api/round/cashout` | Pay win, reveal seed |
+| GET | `/api/history` | Recent settled rounds |
+| POST | `/api/demo/refill` | Refill demo balance |
+| POST | `/api/fair/verify` | Check seed matches hash |
+
+Auth: `Authorization: Bearer <session-token>` (issued by `/api/session`).
+
 ## Controls
 
 - Space / Up / W / tap: hop forward
-- Left / Right / A / D or swipe: steer sideways
+- Left / Right / A / D or swipe: steer
 - Down / S or swipe down: hop back
 
-## Future ideas
+## What operators still need for real money
 
-- Server-driven rounds (move RNG + balance to a backend) for real casino integration
-- Auto-cashout at a target multiplier
-- Music, more biomes (night, snow), skins and cosmetics
+This backend is the **demo / integrator shape**. A licensed launch also needs:
+
+- Certified RNG (e.g. GLI-19) instead of `crypto.randomInt`
+- Real wallet / operator wallet adapter (not demo balance file)
+- Jurisdictional bet limits & configurable RTP per market
+- Aggregator integration (SoftSwiss / Slotegrator / etc.)
+- KYC, responsible gaming, audit logs, and hosting in an approved DC

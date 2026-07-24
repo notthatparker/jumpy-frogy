@@ -342,9 +342,11 @@ function Frog() {
       const s = st.current
       const game = useGame.getState()
       if (game.phase !== 'playing' || s.dead || game.doom) return
+      // Casino hops wait for the server; don't stack inputs while a hop is in flight.
+      if (game.mode === 'casino' && game.busy) return
       if (s.hop) {
-        // Buffer one input so rapid taps feel responsive.
-        s.queue = { dx, dz }
+        // Buffer one input so rapid taps feel responsive (arcade).
+        if (game.mode === 'arcade') s.queue = { dx, dz }
         return
       }
       const tx = THREE.MathUtils.clamp(s.x + dx, -PLAY_HALF, PLAY_HALF)
