@@ -1,0 +1,267 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+  font-family: 'Baloo 2', system-ui, sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.app {
+  position: relative;
+  height: 100%;
+}
+
+.app canvas {
+  touch-action: none;
+}
+
+/* ===== HUD overlay ===== */
+
+.hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 14px;
+}
+
+.hud-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(6px);
+  border-radius: 999px;
+  padding: 8px 16px;
+  box-shadow: 0 4px 14px rgba(60, 90, 60, 0.18);
+  font-weight: 700;
+  font-size: 18px;
+  color: #3c4a3a;
+}
+
+.pill-label {
+  font-size: 13px;
+  color: #8a967f;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.coin {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffe98a, #f5b73c 70%);
+  border: 2px solid #d99a1f;
+}
+
+.mult-box {
+  text-align: center;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(6px);
+  border-radius: 18px;
+  padding: 8px 22px;
+  box-shadow: 0 4px 14px rgba(60, 90, 60, 0.18);
+}
+
+.mult-now {
+  font-size: 30px;
+  font-weight: 800;
+  color: #4a9e3f;
+  line-height: 1.1;
+}
+
+.mult-next {
+  font-size: 13px;
+  color: #8a967f;
+  font-weight: 600;
+}
+
+/* ===== toast ===== */
+
+.toast {
+  align-self: center;
+  padding: 12px 26px;
+  border-radius: 16px;
+  font-size: 20px;
+  font-weight: 800;
+  color: #fff;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+  animation: pop 0.25s ease-out;
+}
+
+.toast-good {
+  background: #58b368;
+}
+
+.toast-bad {
+  background: #e2695e;
+}
+
+@keyframes pop {
+  from {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ===== bottom controls ===== */
+
+.hud-bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.mode-row {
+  pointer-events: auto;
+  display: flex;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(6px);
+  border-radius: 999px;
+  padding: 6px 10px;
+  box-shadow: 0 4px 14px rgba(60, 90, 60, 0.18);
+}
+
+.fair {
+  font-family: monospace;
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.bet-row {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(6px);
+  border-radius: 999px;
+  padding: 6px 10px;
+  box-shadow: 0 4px 14px rgba(60, 90, 60, 0.18);
+}
+
+.bet-btn {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 50%;
+  background: #eef3e8;
+  color: #4a5a44;
+  font-size: 20px;
+  font-weight: 800;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.bet-btn:hover {
+  background: #dfe8d5;
+}
+
+.bet-amount {
+  font-size: 18px;
+  font-weight: 800;
+  color: #3c4a3a;
+  min-width: 70px;
+  text-align: center;
+}
+
+.bet-presets {
+  display: flex;
+  gap: 4px;
+}
+
+.chip {
+  border: none;
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: #eef3e8;
+  color: #4a5a44;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.chip:hover {
+  background: #dfe8d5;
+}
+
+.chip-on {
+  background: #79c860;
+  color: #fff;
+}
+
+.main-btn {
+  pointer-events: auto;
+  border: none;
+  border-radius: 999px;
+  padding: 16px 44px;
+  font-size: 22px;
+  font-weight: 800;
+  font-family: inherit;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.15), 0 10px 24px rgba(60, 90, 60, 0.25);
+  transition: transform 0.08s ease;
+}
+
+.main-btn:active:not(:disabled) {
+  transform: translateY(3px);
+}
+
+.main-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.start {
+  background: linear-gradient(180deg, #86d46c, #58b368);
+}
+
+.cashout {
+  background: linear-gradient(180deg, #ffc95c, #f5a623);
+}
+
+.refill {
+  pointer-events: auto;
+  border: none;
+  background: none;
+  color: #d9534f;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.help {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(50, 70, 50, 0.65);
+  background: rgba(255, 255, 255, 0.55);
+  border-radius: 999px;
+  padding: 4px 14px;
+}
