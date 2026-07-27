@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { STARTING_BALANCE } from '../shared/casino.ts'
+import { DEFAULT_SETTINGS, type CasinoSettings } from '../shared/casino.ts'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DATA_DIR = process.env.DATA_DIR || join(__dirname, '..', 'data')
@@ -34,22 +34,34 @@ export interface Round {
   payout: number
   createdAt: string
   settledAt?: string
+  /** Economics snapshotted at round start so live setting changes never
+      alter a round already in flight. Absent on legacy rounds. */
+  stepMult?: number
+  pSurvive?: number
+  maxPayout?: number
 }
 
 interface DbShape {
   players: Record<string, Player>
   rounds: Record<string, Round>
   history: string[] // recent round ids, newest first
+  settings: CasinoSettings
 }
 
 function empty(): DbShape {
-  return { players: {}, rounds: {}, history: [] }
+  return { players: {}, rounds: {}, history: [], settings: { ...DEFAULT_SETTINGS } }
 }
 
 function load(): DbShape {
   try {
     if (!existsSync(DB_PATH)) return empty()
-    return { ...empty(), ...JSON.parse(readFileSync(DB_PATH, 'utf8')) }
+    const parsed = JSON.parse(readFileSync(DB_PATH, 'utf8')) as Partial<DbShape>
+    return {
+      ...empty(),
+      ...parsed,
+      // New settings keys get defaults even on older data files.
+      settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) },
+    }
   } catch {
     return empty()
   }
@@ -85,12 +97,22 @@ export function getPlayerByToken(token: string): Player | null {
   return Object.values(db.players).find((p) => p.token === token) ?? null
 }
 
+export function getSettings(): CasinoSettings {
+  return { ...db.settings }
+}
+
+export function saveSettings(patch: Partial<CasinoSettings>): CasinoSettings {
+  db.settings = { ...db.settings, ...patch }
+  scheduleSave()
+  return { ...db.settings }
+}
+
 export function createPlayer(id: string, token: string): Player {
   const now = new Date().toISOString()
   const player: Player = {
     id,
     token,
-    balance: STARTING_BALANCE,
+    balance: db.settings.startingBalance,
     createdAt: now,
     updatedAt: now,
   }
@@ -139,6 +161,6 @@ export function adminData() {
 }
 
 export function refillPlayer(player: Player) {
-  player.balance = STARTING_BALANCE
+  player.balance = db.settings.startingBalance
   updatePlayer(player)
 }

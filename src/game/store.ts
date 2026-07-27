@@ -16,7 +16,17 @@ export interface Doom {
 
 const TOKEN_KEY = 'jf_session_token'
 
+/** Live operator settings; defaults match the server until boot fetches them. */
+export interface LiveConfig {
+  rtp: number
+  stepMult: number
+  minBet: number
+  maxBet: number
+  bettingEnabled: boolean
+}
+
 interface GameState {
+  config: LiveConfig
   balance: number
   bet: number
   phase: Phase
@@ -113,6 +123,7 @@ function applyServerRound(
 }
 
 export const useGame = create<GameState>((set, get) => ({
+  config: { rtp: 0.96, stepMult: STEP_MULT, minBet: 1, maxBet: 500, bettingEnabled: true },
   balance: 1000,
   bet: 10,
   phase: 'idle',
@@ -135,7 +146,10 @@ export const useGame = create<GameState>((set, get) => ({
   backend: 'connecting',
   busy: false,
 
-  setBet: (b) => set({ bet: Math.max(1, Math.min(500, Math.round(b))) }),
+  setBet: (b) => {
+    const c = get().config
+    set({ bet: Math.max(c.minBet, Math.min(c.maxBet, Math.round(b))) })
+  },
 
   setMode: (m) => {
     if (get().phase !== 'playing') set({ mode: m })
@@ -154,6 +168,19 @@ export const useGame = create<GameState>((set, get) => ({
           backend: 'online',
           message: null,
         })
+        // Pull live operator settings (bet limits, multiplier growth).
+        void api.config().then((c) => {
+          set({
+            config: {
+              rtp: c.rtp,
+              stepMult: c.stepMult,
+              minBet: c.minBet,
+              maxBet: c.maxBet,
+              bettingEnabled: c.bettingEnabled,
+            },
+            bet: Math.max(c.minBet, Math.min(c.maxBet, get().bet)),
+          })
+        }).catch(() => {})
         return
       } catch (err) {
         lastErr = err
@@ -234,7 +261,7 @@ export const useGame = create<GameState>((set, get) => ({
       for (let r = maxRow + 1; r <= row; r++) {
         const prev = s.rows[r - 1]
         if (prev && prev.kind !== 'grass') {
-          multiplier = +(multiplier * STEP_MULT).toFixed(4)
+          multiplier = +(multiplier * s.config.stepMult).toFixed(4)
           roadsCrossed++
         }
       }

@@ -44,8 +44,19 @@ export interface RoundPublic {
   payout: number
 }
 
+export interface ConfigRes {
+  rtp: number
+  stepMult: number
+  minBet: number
+  maxBet: number
+  maxPayout: number
+  startingBalance: number
+  bettingEnabled: boolean
+}
+
 export const api = {
   health: () => req<{ ok: boolean }>('/api/health'),
+  config: () => req<ConfigRes>('/api/config'),
   session: (token?: string) =>
     req<SessionRes>('/api/session', { method: 'POST', token, body: JSON.stringify({ token }) }),
   start: (token: string, bet: number) =>

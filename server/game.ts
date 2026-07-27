@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomInt } from 'node:crypto'
 import {
+  P_SURVIVE,
   STEP_MULT,
   clampBet,
   generateRows,
@@ -11,6 +12,7 @@ import {
   getActiveRound,
   getPlayerByToken,
   getRound,
+  getSettings,
   recentRounds,
   refillPlayer,
   saveRound,
@@ -75,7 +77,10 @@ export function startRound(token: string, betRaw: number) {
     saveRound(active)
   }
 
-  const bet = clampBet(betRaw)
+  const settings = getSettings()
+  if (!settings.bettingEnabled) return { error: 'betting_disabled', status: 403 as const }
+
+  const bet = clampBet(betRaw, settings.minBet, settings.maxBet)
   if (bet > player.balance) return { error: 'insufficient_balance', status: 400 as const }
 
   player.balance = +(player.balance - bet).toFixed(2)
@@ -99,6 +104,10 @@ export function startRound(token: string, betRaw: number) {
     rolled: {},
     payout: 0,
     createdAt: now,
+    // Snapshot economics so live setting changes never touch a round in flight.
+    stepMult: settings.stepMult,
+    pSurvive: +(settings.rtp / settings.stepMult).toFixed(6),
+    maxPayout: settings.maxPayout,
   }
   saveRound(round)
 
@@ -140,10 +149,10 @@ export function advanceRound(token: string, roundId: string, toRow: number) {
       if (!kind || kind === 'grass') continue
       if (round.rolled[String(r)] !== undefined) continue
 
-      const result = resolveHazard(round.fairSeed, r, kind)
+      const result = resolveHazard(round.fairSeed, r, kind, round.pSurvive ?? P_SURVIVE)
       if (result.survive) {
         round.rolled[String(r)] = true
-        round.multiplier = +(round.multiplier * STEP_MULT).toFixed(4)
+        round.multiplier = +(round.multiplier * (round.stepMult ?? STEP_MULT)).toFixed(4)
         round.lanesCleared++
         ding = true
       } else {
@@ -195,7 +204,8 @@ export function cashOutRound(token: string, roundId: string) {
   if (!round || round.playerId !== player.id) return { error: 'round_not_found', status: 404 as const }
   if (round.status !== 'active') return { error: 'round_not_active', status: 409 as const, round: publicRound(round, true) }
 
-  const payout = +(round.bet * round.multiplier).toFixed(2)
+  const cap = round.maxPayout && round.maxPayout > 0 ? round.maxPayout : Infinity
+  const payout = +Math.min(round.bet * round.multiplier, cap).toFixed(2)
   round.status = 'cashed'
   round.payout = payout
   round.settledAt = new Date().toISOString()

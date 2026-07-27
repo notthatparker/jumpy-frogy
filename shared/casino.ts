@@ -1,12 +1,38 @@
 /** Shared casino math — used by both the client renderer and the authoritative server. */
 
-export const STEP_MULT = 1.18
-export const RTP = 0.96
+/** Operator-tunable economics. Defaults below; live values come from the server. */
+export interface CasinoSettings {
+  /** Target return-to-player, e.g. 0.96 = 96% (house edge 4%). */
+  rtp: number
+  /** Multiplier growth per hazard lane cleared. Survival odds derive from rtp/stepMult. */
+  stepMult: number
+  minBet: number
+  maxBet: number
+  /** Per-round payout cap (operator exposure limit). 0 = uncapped. */
+  maxPayout: number
+  /** Demo credits granted to new players and on refill. */
+  startingBalance: number
+  /** Kill-switch: refuse new rounds while off (maintenance / compliance). */
+  bettingEnabled: boolean
+}
+
+export const DEFAULT_SETTINGS: CasinoSettings = {
+  rtp: 0.96,
+  stepMult: 1.18,
+  minBet: 1,
+  maxBet: 500,
+  maxPayout: 10000,
+  startingBalance: 1000,
+  bettingEnabled: true,
+}
+
+export const STEP_MULT = DEFAULT_SETTINGS.stepMult
+export const RTP = DEFAULT_SETTINGS.rtp
 export const P_SURVIVE = RTP / STEP_MULT
 
-export const MIN_BET = 1
-export const MAX_BET = 500
-export const STARTING_BALANCE = 1000
+export const MIN_BET = DEFAULT_SETTINGS.minBet
+export const MAX_BET = DEFAULT_SETTINGS.maxBet
+export const STARTING_BALANCE = DEFAULT_SETTINGS.startingBalance
 export const ROW_COUNT = 240
 
 export type RowKind = 'grass' | 'road' | 'water'
@@ -123,13 +149,14 @@ export function resolveHazard(
   fairSeed: number,
   row: number,
   kind: RowKind,
+  pSurvive: number = P_SURVIVE,
 ): { survive: boolean; deathKind?: DeathKind } {
   if (kind === 'grass') return { survive: true }
-  const survive = rollLane(fairSeed, row) < P_SURVIVE
+  const survive = rollLane(fairSeed, row) < pSurvive
   if (survive) return { survive: true }
   return { survive: false, deathKind: kind === 'water' ? 'drown' : 'hit' }
 }
 
-export function clampBet(bet: number): number {
-  return Math.max(MIN_BET, Math.min(MAX_BET, Math.round(bet)))
+export function clampBet(bet: number, min: number = MIN_BET, max: number = MAX_BET): number {
+  return Math.max(min, Math.min(max, Math.round(bet)))
 }

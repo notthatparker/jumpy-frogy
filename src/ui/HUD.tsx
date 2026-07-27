@@ -1,6 +1,5 @@
 import type { MouseEvent } from 'react'
-import { useGame, STEP_MULT } from '../game/store'
-import { RTP } from '../game/world'
+import { useGame } from '../game/store'
 
 const BET_PRESETS = [5, 10, 25, 50, 100]
 
@@ -28,6 +27,8 @@ export function HUD() {
   const fairRevealed = useGame((s) => s.fairRevealed)
   const backend = useGame((s) => s.backend)
   const busy = useGame((s) => s.busy)
+  const stepMult = useGame((s) => s.config.stepMult)
+  const rtp = useGame((s) => s.config.rtp)
   const setBet = useGame((s) => s.setBet)
   const setMode = useGame((s) => s.setMode)
   const start = useGame((s) => s.start)
@@ -50,7 +51,7 @@ export function HUD() {
 
         <div className="mult-box">
           <div className="mult-now">x{multiplier.toFixed(2)}</div>
-          <div className="mult-next">next lane x{(multiplier * STEP_MULT).toFixed(2)}</div>
+          <div className="mult-next">next lane x{(multiplier * stepMult).toFixed(2)}</div>
         </div>
 
         <div className="pill">
@@ -69,7 +70,7 @@ export function HUD() {
         {!playing && (
           <div className="mode-row">
             <button className={`chip ${mode === 'casino' ? 'chip-on' : ''}`} onClick={blurring(() => setMode('casino'))}>
-              Casino &middot; RTP {(RTP * 100).toFixed(0)}%
+              Casino &middot; RTP {(rtp * 100).toFixed(0)}%
             </button>
             <button className={`chip ${mode === 'arcade' ? 'chip-on' : ''}`} onClick={blurring(() => setMode('arcade'))}>
               Arcade &middot; skill
