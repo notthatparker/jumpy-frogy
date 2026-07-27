@@ -130,6 +130,14 @@ export function recentRounds(playerId: string, limit = 20): Round[] {
     .slice(0, limit)
 }
 
+/** Full data snapshot for the operator dashboard (demo scale — no pagination). */
+export function adminData() {
+  return {
+    players: Object.values(db.players),
+    rounds: Object.values(db.rounds),
+  }
+}
+
 export function refillPlayer(player: Player) {
   player.balance = STARTING_BALANCE
   updatePlayer(player)

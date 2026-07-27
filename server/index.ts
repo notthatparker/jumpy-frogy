@@ -11,7 +11,7 @@ import {
   STARTING_BALANCE,
   STEP_MULT,
 } from '../shared/casino.ts'
-import { saveNow } from './db.ts'
+import { adminData, saveNow } from './db.ts'
 import {
   advanceRound,
   cashOutRound,
@@ -137,6 +137,65 @@ app.post('/api/demo/refill', (req, res) => {
   const result = refill(token)
   if ('error' in result) return res.status(result.status).json(result)
   res.json({ balance: result.player.balance, message: 'Balance refilled (demo credits)' })
+})
+
+// ---------- Operator dashboard (demo — no auth) ----------
+
+app.get('/api/admin/stats', (_req, res) => {
+  const { players, rounds } = adminData()
+  const settled = rounds
+    .filter((r) => r.status !== 'active')
+    .sort((a, b) => (b.settledAt || '').localeCompare(a.settledAt || ''))
+  const active = rounds.filter((r) => r.status === 'active')
+
+  const wagered = settled.reduce((s, r) => s + r.bet, 0)
+  const paidOut = settled.reduce((s, r) => s + r.payout, 0)
+  const cashed = settled.filter((r) => r.status === 'cashed')
+  const deaths = settled.filter((r) => r.status === 'dead')
+  const biggest = cashed.reduce((best, r) => (r.payout > (best?.payout ?? 0) ? r : best), null as (typeof cashed)[number] | null)
+
+  res.json({
+    now: new Date().toISOString(),
+    config: { rtpTarget: RTP, stepMult: STEP_MULT, minBet: MIN_BET, maxBet: MAX_BET },
+    totals: {
+      players: players.length,
+      playerBalance: +players.reduce((s, p) => s + p.balance, 0).toFixed(2),
+      roundsSettled: settled.length,
+      roundsActive: active.length,
+      wagered: +wagered.toFixed(2),
+      paidOut: +paidOut.toFixed(2),
+      houseProfit: +(wagered - paidOut).toFixed(2),
+      realizedRtp: wagered > 0 ? +(paidOut / wagered).toFixed(4) : null,
+      winRate: settled.length > 0 ? +(cashed.length / settled.length).toFixed(4) : null,
+      avgCashoutMult: cashed.length > 0 ? +(cashed.reduce((s, r) => s + r.multiplier, 0) / cashed.length).toFixed(3) : null,
+      biggestWin: biggest ? { payout: biggest.payout, multiplier: biggest.multiplier, bet: biggest.bet } : null,
+      deathsByKind: {
+        hit: deaths.filter((r) => r.deathKind !== 'drown').length,
+        drown: deaths.filter((r) => r.deathKind === 'drown').length,
+      },
+    },
+    // Oldest-first net results for the chart.
+    chart: settled
+      .slice(0, 60)
+      .reverse()
+      .map((r) => ({ bet: r.bet, net: +(r.payout - r.bet).toFixed(2), status: r.status })),
+    recent: settled.slice(0, 25).map((r) => ({
+      id: r.id.slice(-6),
+      player: r.playerId.slice(-6),
+      bet: r.bet,
+      status: r.status,
+      deathKind: r.deathKind ?? null,
+      multiplier: r.multiplier,
+      lanesCleared: r.lanesCleared,
+      payout: r.payout,
+      settledAt: r.settledAt ?? null,
+      fairHash: r.fairHash.slice(0, 10),
+    })),
+  })
+})
+
+app.get('/admin', (_req, res) => {
+  res.sendFile(join(__dirname, 'admin.html'))
 })
 
 app.post('/api/fair/verify', (req, res) => {

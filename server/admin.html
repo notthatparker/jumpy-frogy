@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Jumpy Frogy — Casino Ops</title>
+<style>
+  :root {
+    --bg: #0f1512;
+    --panel: #16201b;
+    --panel2: #1c2822;
+    --line: #26352d;
+    --text: #e8f2ea;
+    --muted: #8ba695;
+    --green: #6fce62;
+    --red: #ef6a5a;
+    --gold: #ffd166;
+    --blue: #7ec8e3;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 24px;
+  }
+  header { display: flex; align-items: baseline; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
+  h1 { font-size: 20px; font-weight: 700; letter-spacing: 0.2px; }
+  h1 .frog { margin-right: 8px; }
+  .live { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+  .config { margin-left: auto; color: var(--muted); font-size: 12px; }
+  .config b { color: var(--text); font-weight: 600; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 12px; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .card .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; }
+  .card .value { font-size: 24px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .card .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .good { color: var(--green); } .bad { color: var(--red); } .gold { color: var(--gold); } .blue { color: var(--blue); }
+
+  .row2 { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: 12px; }
+  @media (max-width: 900px) { .row2 { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .panel h2 { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 12px; }
+
+  /* RTP gauge */
+  .gauge-track { height: 14px; border-radius: 7px; background: var(--panel2); overflow: hidden; position: relative; }
+  .gauge-fill { height: 100%; border-radius: 7px; background: linear-gradient(90deg, #4fae52, #6fce62); transition: width 0.5s ease; }
+  .gauge-target { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--gold); }
+  .gauge-labels { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; margin-top: 6px; }
+
+  /* chart */
+  #chart { width: 100%; height: 120px; display: block; }
+
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 7px 10px; font-size: 13px; }
+  th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; border-bottom: 1px solid var(--line); }
+  tbody tr { border-bottom: 1px solid var(--line); }
+  tbody tr:last-child { border-bottom: none; }
+  td.num { text-align: right; } th.num { text-align: right; }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .pill.cashed { background: rgba(111, 206, 98, 0.15); color: var(--green); }
+  .pill.hit { background: rgba(239, 106, 90, 0.15); color: var(--red); }
+  .pill.drown { background: rgba(126, 200, 227, 0.15); color: var(--blue); }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--muted); }
+  .empty { color: var(--muted); text-align: center; padding: 24px 0; }
+</style>
+</head>
+<body>
+  <header>
+    <h1><span class="frog">🐸</span>Jumpy Frogy — Casino Ops</h1>
+    <span class="live"><span class="dot"></span>live · refreshes every 2s</span>
+    <span class="config" id="config"></span>
+  </header>
+
+  <div class="grid" id="cards"></div>
+
+  <div class="row2">
+    <div class="panel">
+      <h2>Net result per round (house view, latest 60)</h2>
+      <svg id="chart" preserveAspectRatio="none"></svg>
+    </div>
+    <div class="panel">
+      <h2>Realized RTP vs target</h2>
+      <div class="gauge-track">
+        <div class="gauge-fill" id="rtpFill" style="width:0%"></div>
+        <div class="gauge-target" id="rtpTarget" style="left:96%"></div>
+      </div>
+      <div class="gauge-labels"><span>0%</span><span id="rtpText">—</span><span>120%</span></div>
+      <div style="margin-top:16px" id="extras"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Recent rounds</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Settled</th><th>Round</th><th>Player</th><th class="num">Bet</th>
+          <th>Result</th><th class="num">Mult</th><th class="num">Lanes</th>
+          <th class="num">Payout</th><th class="num">House</th><th>Fair hash</th>
+        </tr>
+      </thead>
+      <tbody id="rows"><tr><td colspan="10" class="empty">Loading…</td></tr></tbody>
+    </table>
+  </div>
+
+<script>
+const $ = (id) => document.getElementById(id)
+const coins = (n) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const pct = (n) => (n * 100).toFixed(1) + '%'
+
+function card(label, value, cls = '', sub = '') {
+  return `<div class="card"><div class="label">${label}</div>
+    <div class="value ${cls}">${value}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div>`
+}
+
+function render(d) {
+  const t = d.totals
+  $('config').innerHTML =
+    `target RTP <b>${pct(d.config.rtpTarget)}</b> · step <b>x${d.config.stepMult}</b> · bets <b>${d.config.minBet}–${d.config.maxBet}</b>`
+
+  $('cards').innerHTML =
+    card('Players', t.players, 'blue', `${coins(t.playerBalance)} coins held`) +
+    card('Rounds', t.roundsSettled, '', `${t.roundsActive} active now`) +
+    card('Wagered', coins(t.wagered), 'gold') +
+    card('Paid out', coins(t.paidOut)) +
+    card('House profit', coins(t.houseProfit), t.houseProfit >= 0 ? 'good' : 'bad') +
+    card('Win rate', t.winRate == null ? '—' : pct(t.winRate), '',
+      `deaths: ${t.deathsByKind.hit} hit · ${t.deathsByKind.drown} chomped`)
+
+  // RTP gauge (scale 0–120%)
+  const rtp = t.realizedRtp
+  $('rtpFill').style.width = rtp == null ? '0%' : Math.min(100, (rtp / 1.2) * 100) + '%'
+  $('rtpTarget').style.left = (d.config.rtpTarget / 1.2) * 100 + '%'
+  $('rtpText').textContent = rtp == null ? 'no data yet' : `realized ${pct(rtp)} (target ${pct(d.config.rtpTarget)})`
+  $('rtpFill').style.background = rtp != null && rtp > 1.05
+    ? 'linear-gradient(90deg,#c96a5a,#ef6a5a)' : 'linear-gradient(90deg,#4fae52,#6fce62)'
+
+  $('extras').innerHTML =
+    (t.avgCashoutMult != null ? `<div class="sub" style="color:var(--muted)">avg cash-out <b style="color:var(--text)">x${t.avgCashoutMult}</b></div>` : '') +
+    (t.biggestWin ? `<div class="sub" style="color:var(--muted)">biggest win <b style="color:var(--gold)">${coins(t.biggestWin.payout)}</b> (x${t.biggestWin.multiplier} on ${t.biggestWin.bet})</div>` : '')
+
+  // Net-result bar chart
+  const svg = $('chart')
+  const W = svg.clientWidth || 600, H = 120, mid = H / 2
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`)
+  const data = d.chart
+  let bars = `<line x1="0" y1="${mid}" x2="${W}" y2="${mid}" stroke="#26352d" stroke-width="1"/>`
+  if (data.length) {
+    const maxAbs = Math.max(1, ...data.map((c) => Math.abs(c.net)))
+    const bw = Math.max(2, Math.min(18, W / data.length - 2))
+    data.forEach((c, i) => {
+      const h = Math.max(2, (Math.abs(c.net) / maxAbs) * (mid - 6))
+      const x = (i + 0.5) * (W / data.length) - bw / 2
+      // house view: player loss (net<0) is green for the house
+      const up = c.net < 0
+      bars += `<rect x="${x}" y="${up ? mid - h : mid}" width="${bw}" height="${h}" rx="1.5"
+        fill="${up ? '#6fce62' : '#ef6a5a'}" opacity="0.85"/>`
+    })
+  }
+  svg.innerHTML = bars
+
+  // Recent rounds table
+  const rows = d.recent.map((r) => {
+    const result = r.status === 'cashed'
+      ? '<span class="pill cashed">cashed</span>'
+      : r.deathKind === 'drown'
+        ? '<span class="pill drown">chomped</span>'
+        : '<span class="pill hit">splat</span>'
+    const house = r.bet - r.payout
+    const time = r.settledAt ? new Date(r.settledAt).toLocaleTimeString() : '—'
+    return `<tr>
+      <td class="mono">${time}</td>
+      <td class="mono">…${r.id}</td>
+      <td class="mono">…${r.player}</td>
+      <td class="num">${coins(r.bet)}</td>
+      <td>${result}</td>
+      <td class="num">x${r.multiplier.toFixed(2)}</td>
+      <td class="num">${r.lanesCleared}</td>
+      <td class="num">${coins(r.payout)}</td>
+      <td class="num ${house >= 0 ? 'good' : 'bad'}">${house >= 0 ? '+' : ''}${coins(house)}</td>
+      <td class="mono">${r.fairHash}…</td>
+    </tr>`
+  })
+  $('rows').innerHTML = rows.length ? rows.join('') : '<tr><td colspan="10" class="empty">No settled rounds yet — go play a few!</td></tr>'
+}
+
+async function tick() {
+  try {
+    const res = await fetch('/api/admin/stats')
+    if (res.ok) render(await res.json())
+  } catch { /* server restarting — keep polling */ }
+}
+tick()
+setInterval(tick, 2000)
+</script>
+</body>
+</html>
