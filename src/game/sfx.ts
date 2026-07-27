@@ -70,4 +70,17 @@ export const sfx = {
     setTimeout(() => tone(311, 0.26, 'sawtooth', 0.12), 70)
     noise(0.5, 0.1, 700)
   },
+  mower: () => {
+    noise(0.55, 0.22, 1400)
+    tone(90, 0.4, 'sawtooth', 0.08, 140)
+  },
+  chomp: () => {
+    tone(120, 0.12, 'square', 0.14, 60)
+    setTimeout(() => tone(80, 0.18, 'sawtooth', 0.12, 40), 60)
+    noise(0.2, 0.2, 500)
+  },
+  gator: () => {
+    tone(70, 0.4, 'sawtooth', 0.07, 52)
+    noise(0.35, 0.12, 320)
+  },
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, type RefObject } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { RoundedBox } from '@react-three/drei'
 import * as THREE from 'three'
@@ -9,8 +9,8 @@ import { ROW_D, PLAY_HALF, carX, rowRng, type Row } from './world'
 const CAR_COLORS = ['#f28b82', '#aecbfa', '#fdd663', '#ccff90', '#d7aefb', '#ffb3c1', '#a7ffeb']
 const TREE_GREENS = ['#7ecb6f', '#5fb85a', '#96d98a']
 
-/** Frog world position, shared with non-React helpers like the doom car. */
-const frogPos = { x: 0, z: 0 }
+/** Frog world position, shared with traffic / hazard helpers. */
+const frogPos = { x: 0, y: 0, z: 0 }
 
 // ---------- Particle bursts (dust puffs, bubbles) ----------
 
@@ -217,21 +217,500 @@ function Log({ len }: { len: number }) {
   )
 }
 
+function MowerMesh() {
+  const blade = useRef<THREE.Mesh>(null)
+  useFrame((_, dt) => {
+    if (blade.current) blade.current.rotation.y += dt * 22
+  })
+  return (
+    <group>
+      {/* cutting deck */}
+      <RoundedBox castShadow args={[1.35, 0.18, 0.95]} radius={0.08} smoothness={3} position={[0, 0.22, 0]}>
+        <meshStandardMaterial color="#3d9b4a" />
+      </RoundedBox>
+      {/* deck lip / skirt */}
+      <RoundedBox args={[1.4, 0.08, 1.0]} radius={0.04} smoothness={2} position={[0, 0.12, 0]}>
+        <meshStandardMaterial color="#2e7d38" />
+      </RoundedBox>
+      {/* engine cowling */}
+      <RoundedBox castShadow args={[0.55, 0.38, 0.48]} radius={0.1} smoothness={3} position={[0.05, 0.48, 0]}>
+        <meshStandardMaterial color="#ef5350" />
+      </RoundedBox>
+      {/* air filter / cap */}
+      <mesh castShadow position={[0.05, 0.72, 0]}>
+        <cylinderGeometry args={[0.12, 0.14, 0.1, 10]} />
+        <meshStandardMaterial color="#f5f5f5" />
+      </mesh>
+      {/* exhaust */}
+      <mesh castShadow position={[0.38, 0.42, 0.28]} rotation={[0.3, 0, 0.4]}>
+        <cylinderGeometry args={[0.05, 0.06, 0.22, 8]} />
+        <meshStandardMaterial color="#546e7a" metalness={0.5} roughness={0.4} />
+      </mesh>
+      {/* push handle stems */}
+      {[-0.22, 0.22].map((z) => (
+        <mesh key={z} castShadow position={[-0.55, 0.55, z]} rotation={[0, 0, 0.55]}>
+          <cylinderGeometry args={[0.035, 0.035, 0.95, 8]} />
+          <meshStandardMaterial color="#eceff1" />
+        </mesh>
+      ))}
+      {/* handle bar */}
+      <mesh castShadow position={[-0.95, 0.95, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.04, 0.04, 0.55, 8]} />
+        <meshStandardMaterial color="#37474f" />
+      </mesh>
+      {/* grip tips */}
+      {[-0.26, 0.26].map((z) => (
+        <mesh key={z} position={[-0.95, 0.95, z]}>
+          <sphereGeometry args={[0.055, 8, 8]} />
+          <meshStandardMaterial color="#263238" />
+        </mesh>
+      ))}
+      {/* front wheels (smaller) */}
+      {[-0.38, 0.38].map((z) => (
+        <mesh key={`f${z}`} castShadow position={[0.42, 0.14, z]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.14, 0.14, 0.1, 12]} />
+          <meshStandardMaterial color="#212121" />
+        </mesh>
+      ))}
+      {/* rear wheels (bigger) */}
+      {[-0.4, 0.4].map((z) => (
+        <mesh key={`r${z}`} castShadow position={[-0.4, 0.18, z]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.2, 0.2, 0.12, 12]} />
+          <meshStandardMaterial color="#212121" />
+        </mesh>
+      ))}
+      {/* spinning blade under the deck */}
+      <mesh ref={blade} position={[0.1, 0.06, 0]}>
+        <cylinderGeometry args={[0.42, 0.42, 0.03, 6]} />
+        <meshStandardMaterial color="#90a4ae" metalness={0.65} roughness={0.3} />
+      </mesh>
+    </group>
+  )
+}
+
+/** Proper croc: ridged back, eye bumps, tapering tail, and a hinged snout that snaps. */
+function AlligatorMesh({ len, jawRef }: { len: number; jawRef: RefObject<THREE.Group | null> }) {
+  const L = Math.max(1.5, len * 1.3)
+  const hide = '#4f9e5f'
+  const dark = '#3a7d49'
+  const belly = '#c4dfa8'
+  return (
+    <group>
+      {/* torso */}
+      <RoundedBox castShadow args={[L * 0.5, 0.26, 0.56]} radius={0.1} smoothness={3} position={[0, 0.13, 0]}>
+        <meshStandardMaterial color={hide} />
+      </RoundedBox>
+      {/* two rows of back scutes */}
+      {[-0.11, 0.11].map((z) =>
+        [-0.18, -0.02, 0.14].map((fx) => (
+          <mesh key={`${z}-${fx}`} castShadow position={[L * fx, 0.31, z]} rotation={[0, Math.PI / 4, 0]}>
+            <coneGeometry args={[0.055, 0.12, 4]} />
+            <meshStandardMaterial color={dark} />
+          </mesh>
+        )),
+      )}
+      {/* head */}
+      <RoundedBox castShadow args={[L * 0.2, 0.2, 0.46]} radius={0.07} smoothness={3} position={[L * 0.3, 0.14, 0]}>
+        <meshStandardMaterial color={hide} />
+      </RoundedBox>
+      {/* eye bumps peeking above the water */}
+      {[-0.14, 0.14].map((z) => (
+        <group key={z} position={[L * 0.3, 0.28, z]}>
+          <mesh castShadow>
+            <sphereGeometry args={[0.085, 10, 10]} />
+            <meshStandardMaterial color={hide} />
+          </mesh>
+          <mesh position={[0.035, 0.035, 0]}>
+            <sphereGeometry args={[0.05, 8, 8]} />
+            <meshStandardMaterial color="#f6efd3" />
+          </mesh>
+          <mesh position={[0.06, 0.05, 0]}>
+            <sphereGeometry args={[0.024, 6, 6]} />
+            <meshStandardMaterial color="#22301f" />
+          </mesh>
+        </group>
+      ))}
+      {/* lower jaw + teeth */}
+      <RoundedBox args={[L * 0.34, 0.09, 0.34]} radius={0.045} smoothness={2} position={[L * 0.52, 0.06, 0]}>
+        <meshStandardMaterial color={belly} />
+      </RoundedBox>
+      {[-0.11, 0, 0.11].map((z) => (
+        <mesh key={z} position={[L * 0.62, 0.115, z]}>
+          <coneGeometry args={[0.026, 0.07, 4]} />
+          <meshStandardMaterial color="#fffdf2" />
+        </mesh>
+      ))}
+      {/* upper snout — hinges open at the head */}
+      <group ref={jawRef} position={[L * 0.38, 0.17, 0]}>
+        <RoundedBox castShadow args={[L * 0.36, 0.1, 0.36]} radius={0.05} smoothness={2} position={[L * 0.16, 0, 0]}>
+          <meshStandardMaterial color={hide} />
+        </RoundedBox>
+        {[-0.07, 0.07].map((z) => (
+          <mesh key={z} position={[L * 0.32, 0.055, z]}>
+            <sphereGeometry args={[0.035, 8, 8]} />
+            <meshStandardMaterial color={dark} />
+          </mesh>
+        ))}
+      </group>
+      {/* tapering tail with a curve */}
+      <RoundedBox castShadow args={[L * 0.24, 0.2, 0.42]} radius={0.08} smoothness={2} position={[-L * 0.34, 0.11, 0.02]} rotation={[0, 0.12, 0]}>
+        <meshStandardMaterial color={hide} />
+      </RoundedBox>
+      <RoundedBox castShadow args={[L * 0.2, 0.14, 0.28]} radius={0.06} smoothness={2} position={[-L * 0.5, 0.09, 0.07]} rotation={[0, 0.3, 0]}>
+        <meshStandardMaterial color={dark} />
+      </RoundedBox>
+      <mesh castShadow position={[-L * 0.64, 0.08, 0.13]} rotation={[0, 0.45, Math.PI / 2]}>
+        <coneGeometry args={[0.08, L * 0.2, 6]} />
+        <meshStandardMaterial color={dark} />
+      </mesh>
+      {/* stubby legs */}
+      {([
+        [-0.12, -0.31],
+        [-0.12, 0.31],
+        [0.22, -0.29],
+        [0.22, 0.29],
+      ] as const).map(([fx, z]) => (
+        <mesh key={`${fx}${z}`} castShadow position={[L * fx, 0.05, z]}>
+          <sphereGeometry args={[0.09, 8, 8]} />
+          <meshStandardMaterial color={dark} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+/** Timed lawn mower: arms when the frog lands on this grass, then sweeps. */
+function GrassMower({ row, i }: { row: Row; i: number }) {
+  const group = useRef<THREE.Group>(null)
+  const st = useRef({
+    watching: false,
+    t0: 0,
+    active: false,
+    x: 0,
+    hit: false,
+    buzzed: false,
+    clipT: 0,
+  })
+
+  useFrame((_, dt) => {
+    const g = group.current
+    if (!g || !row.mowerDelay) return
+    const game = useGame.getState()
+    const s = st.current
+    const now = performance.now() / 1000
+    const onMe = game.phase === 'playing' && game.frogRow === i && !game.doom
+
+    if (!s.active) {
+      // Still counting down: only while the frog is camping this lane.
+      if (!onMe) {
+        s.watching = false
+        g.visible = false
+        return
+      }
+      if (!s.watching) {
+        s.watching = true
+        s.t0 = now
+        s.buzzed = false
+        s.hit = false
+        s.x = row.dir * -(PLAY_HALF + 3)
+        g.visible = false
+      }
+      if (now - s.t0 < (row.mowerDelay || 2)) return
+      s.active = true
+      g.visible = true
+      if (!s.buzzed) {
+        s.buzzed = true
+        sfx.mower()
+      }
+    }
+
+    // Sweeping: finish the pass even if the frog hops away mid-run.
+    s.x += row.dir * row.speed * Math.min(dt, 0.05)
+    g.position.x = s.x
+    g.rotation.y = row.dir === 1 ? 0 : Math.PI
+    // Engine rattle + a trail of grass clippings.
+    g.position.y = Math.abs(Math.sin(now * 24)) * 0.02
+    g.rotation.z = Math.sin(now * 31) * 0.015
+    s.clipT += Math.min(dt, 0.05)
+    if (s.clipT > 0.14 && Math.abs(s.x) < PLAY_HALF + 1.5) {
+      s.clipT = 0
+      spawnBurst(s.x - row.dir * 0.85, i * ROW_D, '#a5d6a7')
+    }
+
+    if (!s.hit && onMe && frogPos.y < 0.35 && Math.abs(s.x - frogPos.x) < row.carLen / 2 + 0.35) {
+      s.hit = true
+      useGame.getState().die('hit')
+    }
+
+    if (Math.abs(s.x) > PLAY_HALF + 6) {
+      if (onMe && !s.hit) {
+        // Frog is still camping — come back for another pass.
+        s.x = row.dir * -(PLAY_HALF + 3)
+        sfx.mower()
+      } else {
+        s.active = false
+        s.watching = false
+        s.hit = false
+        g.visible = false
+      }
+    }
+  })
+
+  if (!row.mowerDelay) return null
+  return (
+    <group ref={group} position={[0, 0, i * ROW_D]} visible={false}>
+      <MowerMesh />
+    </group>
+  )
+}
+
+/**
+ * Ambush gator: invisible while the frog is elsewhere. When the frog lingers
+ * on this water lane, it surfaces near the frog — eyes and ripples first as a
+ * warning — then lunges with a jaw snap. Hop away during the warning to live.
+ */
+function WaterGators({ row, i }: { row: Row; i: number }) {
+  const group = useRef<THREE.Group>(null)
+  const jaw = useRef<THREE.Group>(null)
+  const st = useRef({
+    phase: 'idle' as 'idle' | 'wait' | 'warn' | 'lunge' | 'sink',
+    t0: 0,
+    x: 0,
+    face: 1,
+    delay: 0,
+    rippleT: 0,
+    killed: false,
+    splashed: false,
+  })
+  const seed = useGame((s) => s.seed)
+
+  useEffect(() => {
+    st.current.phase = 'idle'
+    st.current.killed = false
+    if (group.current) group.current.visible = false
+  }, [seed])
+
+  const WARN = 0.75
+  const LUNGE = 0.3
+  const SINK = 0.55
+
+  useFrame((_, dtRaw) => {
+    const g = group.current
+    if (!g) return
+    const dt = Math.min(dtRaw, 0.05)
+    const game = useGame.getState()
+    const s = st.current
+    const now = performance.now() / 1000
+    const frogHere =
+      game.phase === 'playing' && game.frogRow === i && !game.doom && Math.abs(frogPos.z - i * ROW_D) < ROW_D * 0.55
+
+    // Frog moved on before we struck — slip back under.
+    if (!frogHere && (s.phase === 'wait' || s.phase === 'warn')) {
+      if (s.phase === 'warn') {
+        s.phase = 'sink'
+        s.t0 = now
+      } else {
+        s.phase = 'idle'
+        g.visible = false
+      }
+    }
+
+    if (s.phase === 'idle') {
+      g.visible = false
+      if (frogHere) {
+        s.phase = 'wait'
+        s.t0 = now
+        s.delay = 1.0 + Math.random() * 1.7
+        s.killed = false
+      }
+      return
+    }
+
+    if (s.phase === 'wait') {
+      if (now - s.t0 >= s.delay) {
+        s.phase = 'warn'
+        s.t0 = now
+        s.rippleT = 0
+        s.splashed = false
+        s.x = THREE.MathUtils.clamp(frogPos.x, -PLAY_HALF, PLAY_HALF)
+        s.face = frogPos.x >= s.x ? 1 : -1
+        g.visible = true
+        g.position.y = -0.75
+        sfx.gator()
+      }
+      return
+    }
+
+    g.position.z = i * ROW_D
+
+    if (s.phase === 'warn') {
+      const p = Math.min(1, (now - s.t0) / WARN)
+      const ease = p * p * (3 - 2 * p) // smoothstep rise, not a linear pop
+      // Track the frog slowly while only the eyes are out — dodging matters.
+      s.x = THREE.MathUtils.lerp(s.x, THREE.MathUtils.clamp(frogPos.x, -PLAY_HALF, PLAY_HALF), dt * 2.4)
+      s.face = frogPos.x >= s.x ? 1 : -1
+      g.position.x = s.x
+      g.position.y = -0.75 + ease * 0.42 + Math.sin(now * 6) * 0.012 // breach with a bob
+      g.rotation.y = s.face === 1 ? 0 : Math.PI
+      g.rotation.z = 0.1 * (1 - ease) // nose tilts level as it rises
+      if (jaw.current) jaw.current.rotation.z = 0
+      // One splash the moment the eyes break the surface, then ripples.
+      if (!s.splashed && ease > 0.55) {
+        s.splashed = true
+        spawnBurst(s.x, i * ROW_D, '#d9f2fb')
+      }
+      s.rippleT += dt
+      if (s.rippleT > 0.16) {
+        s.rippleT = 0
+        spawnBurst(s.x, i * ROW_D, '#9fdcef')
+      }
+      if (p >= 1) {
+        s.phase = 'lunge'
+        s.t0 = now
+        spawnBurst(s.x, i * ROW_D, '#d9f2fb')
+      }
+      return
+    }
+
+    if (s.phase === 'lunge') {
+      const p = Math.min(1, (now - s.t0) / LUNGE)
+      g.position.x = s.x
+      g.position.y = -0.33 + Math.sin(p * Math.PI) * 0.34 // breach, then settle
+      g.rotation.z = Math.sin(p * Math.PI) * 0.28 // rears up, then slams down
+      if (jaw.current) jaw.current.rotation.z = Math.sin(Math.min(1, p * 1.25) * Math.PI) * 0.6
+      if (
+        !s.killed &&
+        p >= 0.35 &&
+        p <= 0.8 &&
+        frogHere &&
+        frogPos.y < 0.35 &&
+        Math.abs(s.x - frogPos.x) < 1.05
+      ) {
+        s.killed = true
+        sfx.chomp()
+        spawnBurst(s.x, i * ROW_D, '#bfe9f7')
+        game.die('drown')
+      }
+      if (p >= 1) {
+        s.phase = 'sink'
+        s.t0 = now
+      }
+      return
+    }
+
+    // sink — nose dips first, trailing bubbles
+    const p = Math.min(1, (now - s.t0) / SINK)
+    g.position.y = THREE.MathUtils.lerp(g.position.y, -0.8, p * 0.35 + 0.06)
+    g.rotation.z = THREE.MathUtils.lerp(g.rotation.z, -0.15, 0.12)
+    if (jaw.current) jaw.current.rotation.z = THREE.MathUtils.lerp(jaw.current.rotation.z, 0, 0.2)
+    s.rippleT += dt
+    if (s.rippleT > 0.22 && p < 0.7) {
+      s.rippleT = 0
+      spawnBurst(s.x, i * ROW_D, '#bfe9f7')
+    }
+    if (p >= 1) {
+      s.phase = 'idle'
+      g.visible = false
+    }
+  })
+
+  return (
+    <group ref={group} position={[0, -0.8, i * ROW_D]} visible={false}>
+      <AlligatorMesh len={row.gatorLen ?? 1.2} jawRef={jaw} />
+    </group>
+  )
+}
+
 function LaneTraffic({ row, i }: { row: Row; i: number }) {
   const group = useRef<THREE.Group>(null)
-  useFrame(({ clock }) => {
+  // When a casino "hit" doom lands on this road, one existing car peels out toward the frog.
+  const doomRun = useRef<{
+    k: number
+    x: number
+    dir: number
+    speed: number
+    impacted: boolean
+    horned: boolean
+    doomAt: number
+  } | null>(null)
+
+  useFrame(({ clock }, dt) => {
     const g = group.current
     if (!g) return
     const game = useGame.getState()
     const t = clock.elapsedTime
+    const doom = game.doom
+    const isDoomLane = row.kind === 'road' && doom && doom.kind === 'hit' && doom.row === i
+
+    if (isDoomLane && doom) {
+      if (!doomRun.current || doomRun.current.doomAt !== doom.at) {
+        // Pick the car already approaching the frog (behind it in traffic direction).
+        let bestK = 0
+        let bestScore = -Infinity
+        for (let k = 0; k < row.count; k++) {
+          const x = carX(row, k, t)
+          const behind = row.dir === 1 ? frogPos.x - x : x - frogPos.x
+          const score = behind > 0.15 ? 100 - behind : -Math.abs(x - frogPos.x)
+          if (score > bestScore) {
+            bestScore = score
+            bestK = k
+          }
+        }
+        const startX = carX(row, bestK, t)
+        doomRun.current = {
+          k: bestK,
+          x: startX,
+          // Lock the charge direction now — recomputing it every frame makes
+          // the car jitter back and forth over the frog after impact.
+          dir: Math.sign(frogPos.x - startX) || row.dir,
+          speed: row.speed * 1.15,
+          impacted: false,
+          horned: false,
+          doomAt: doom.at,
+        }
+      }
+    } else {
+      doomRun.current = null
+    }
+
     // Casino mode: the lane you're standing on is already resolved safe, so
     // cars whimsically leap over the frog instead of hitting it.
     const overFrog =
-      row.kind === 'road' && game.mode === 'casino' && game.phase === 'playing' && game.frogRow === i
+      row.kind === 'road' &&
+      game.mode === 'casino' &&
+      game.phase === 'playing' &&
+      game.frogRow === i &&
+      !isDoomLane
+
     for (let k = 0; k < g.children.length; k++) {
       const item = g.children[k]
+      const run = doomRun.current
+      if (run && k === run.k) {
+        if (!run.horned) {
+          run.horned = true
+          sfx.horn()
+        }
+        run.speed += 28 * Math.min(dt, 0.05)
+        run.x += run.dir * run.speed * Math.min(dt, 0.05)
+        item.position.x = run.x
+        item.position.y = 0
+        item.rotation.y = run.dir === 1 ? 0 : Math.PI
+        // Nose-down lean while flooring it; relax once it has driven past.
+        item.rotation.z = run.impacted
+          ? THREE.MathUtils.lerp(item.rotation.z, 0, 0.1)
+          : run.dir * -0.08
+        if (!run.impacted && Math.abs(run.x - frogPos.x) < row.carLen / 2 + 0.35) {
+          run.impacted = true
+          spawnBurst(frogPos.x, frogPos.z, '#ffd9a0')
+          spawnBurst(frogPos.x + run.dir * 0.3, frogPos.z, '#f2f7ea')
+          useGame.getState().die('hit')
+        }
+        continue
+      }
+
       const x = carX(row, k, t)
       item.position.x = x
+      item.rotation.z = 0
       let targetY = 0
       if (overFrog) {
         const d = Math.abs(x - frogPos.x)
@@ -250,47 +729,6 @@ function LaneTraffic({ row, i }: { row: Row; i: number }) {
           <Log key={k} len={row.carLen} />
         ),
       )}
-    </group>
-  )
-}
-
-// ---------- Doom car (casino mode losing roll) ----------
-
-function DoomCar() {
-  const doom = useGame((s) => s.doom)
-  const ref = useRef<THREE.Group>(null)
-  const anim = useRef<{ fromX: number; targetX: number; impacted: boolean } | null>(null)
-
-  useEffect(() => {
-    anim.current = null
-  }, [doom])
-
-  useFrame(() => {
-    const g = ref.current
-    if (!g) return
-    if (!doom || doom.kind !== 'hit') {
-      g.visible = false
-      return
-    }
-    if (!anim.current) {
-      anim.current = { fromX: frogPos.x >= 0 ? -14 : 14, targetX: frogPos.x, impacted: false }
-    }
-    const a = anim.current
-    const now = performance.now() / 1000
-    const dir = a.fromX < a.targetX ? 1 : -1
-    const x = a.fromX + dir * 30 * (now - doom.at)
-    g.visible = now - doom.at < 1.4
-    g.position.set(x, 0, doom.row * ROW_D)
-    g.rotation.y = dir === 1 ? 0 : Math.PI
-    if (!a.impacted && (x - a.targetX) * dir >= -0.45) {
-      a.impacted = true
-      useGame.getState().die('hit')
-    }
-  })
-
-  return (
-    <group ref={ref} visible={false}>
-      <Car len={2} color="#e2695e" />
     </group>
   )
 }
@@ -319,7 +757,7 @@ function Frog() {
     dead: false,
     landT: 0,
     attach: null as { row: number; k: number; dx: number } | null,
-    queue: null as { dx: number; dz: number } | null,
+    queue: null as { dx: number; dz: number; at: number } | null,
     drownFx: false,
   })
   const tryHopRef = useRef<(dx: number, dz: number) => void>(() => {})
@@ -342,11 +780,10 @@ function Frog() {
       const s = st.current
       const game = useGame.getState()
       if (game.phase !== 'playing' || s.dead || game.doom) return
-      // Casino hops wait for the server; don't stack inputs while a hop is in flight.
-      if (game.mode === 'casino' && game.busy) return
-      if (s.hop) {
-        // Buffer one input so rapid taps feel responsive (arcade).
-        if (game.mode === 'arcade') s.queue = { dx, dz }
+      // Mid-hop, or waiting on the server: buffer the input instead of
+      // dropping it, so rapid taps never lose hops or desync from the server.
+      if (s.hop || (game.mode === 'casino' && game.busy)) {
+        s.queue = { dx, dz, at: performance.now() / 1000 }
         return
       }
       const tx = THREE.MathUtils.clamp(s.x + dx, -PLAY_HALF, PLAY_HALF)
@@ -421,6 +858,7 @@ function Frog() {
       g.position.z = THREE.MathUtils.lerp(h.fz, h.tz, p)
       g.position.y = Math.sin(Math.PI * p) * 0.55
       b.scale.set(1, 1 + Math.sin(Math.PI * p) * 0.25, 1)
+      b.rotation.x = Math.sin(Math.PI * p) * 0.3 // lean into the jump
       const dx = h.tx - h.fx
       const dz = h.tz - h.fz
       if (dx !== 0 || dz !== 0) g.rotation.y = Math.atan2(dx, dz)
@@ -462,15 +900,15 @@ function Frog() {
         if (!s.dead) sfx.land()
 
         if (rowChanged && !s.dead) game.advanceTo(s.row)
-
-        // Fire a buffered input, if any.
-        if (s.queue && !s.dead) {
-          const q = s.queue
-          s.queue = null
-          tryHopRef.current(q.dx, q.dz)
-        }
       }
     } else if (!s.dead) {
+      // Fire a buffered input once we're grounded and the server is free.
+      if (s.queue && game.phase === 'playing' && !game.doom && !(game.mode === 'casino' && game.busy)) {
+        const q = s.queue
+        s.queue = null
+        if (now - q.at < 0.4) tryHopRef.current(q.dx, q.dz)
+      }
+      b.rotation.x = THREE.MathUtils.lerp(b.rotation.x, 0, 0.3)
       // Riding a log: drift with it.
       if (s.attach) {
         const rowObj = game.rows[s.attach.row]
@@ -527,6 +965,11 @@ function Frog() {
     if (game.doom && game.doom.kind === 'drown' && game.phase === 'playing' && now - game.doom.at > 0.45) {
       game.die('drown')
     }
+    // Safety net: if the doom car somehow never connects, settle the round
+    // anyway so the player is never left frozen mid-run.
+    if (game.doom && game.doom.kind === 'hit' && game.phase === 'playing' && now - game.doom.at > 2.5) {
+      game.die('hit')
+    }
 
     // Death animation: flatten for hits, sink with bubbles for drowning.
     if (s.dead) {
@@ -537,6 +980,10 @@ function Frog() {
         }
         g.position.y = THREE.MathUtils.lerp(g.position.y, -0.65, 0.12)
       } else {
+        if (!s.drownFx) {
+          s.drownFx = true
+          spawnBurst(g.position.x, g.position.z, '#cdea9f')
+        }
         b.scale.y = THREE.MathUtils.lerp(b.scale.y, 0.12, 0.25)
         b.scale.x = THREE.MathUtils.lerp(b.scale.x, 1.35, 0.25)
         b.scale.z = THREE.MathUtils.lerp(b.scale.z, 1.35, 0.25)
@@ -567,6 +1014,7 @@ function Frog() {
     }
 
     frogPos.x = g.position.x
+    frogPos.y = g.position.y
     frogPos.z = g.position.z
 
     // Camera follows the frog.
@@ -665,7 +1113,16 @@ export function Scene() {
         .map(({ row, i }) => (
           <LaneTraffic key={`t-${seed}-${i}`} row={row} i={i} />
         ))}
-      <DoomCar />
+      {visible
+        .filter(({ row }) => row.kind === 'grass' && row.mowerDelay)
+        .map(({ row, i }) => (
+          <GrassMower key={`m-${seed}-${i}`} row={row} i={i} />
+        ))}
+      {visible
+        .filter(({ row }) => row.kind === 'water' && (row.gatorCount ?? 0) > 0)
+        .map(({ row, i }) => (
+          <WaterGators key={`g-${seed}-${i}`} row={row} i={i} />
+        ))}
       <Bursts />
       <Frog />
     </>

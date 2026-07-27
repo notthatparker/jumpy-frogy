@@ -115,7 +115,7 @@ export function HUD() {
         )}
 
         <div className="help">
-          Space / tap: hop forward &middot; swipe or WASD: steer &middot; demo credits only
+          Space / tap: hop &middot; swipe or WASD: steer &middot; don&apos;t linger — mowers &amp; gators &middot; demo only
           {mode === 'casino' && fairHash && (
             <span className="fair">
               {' '}

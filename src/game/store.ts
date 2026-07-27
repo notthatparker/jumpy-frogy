@@ -83,7 +83,7 @@ function applyServerRound(
     balance: data.balance,
     roundId: r.id,
     seed: r.worldSeed,
-    rows: generateRows(r.worldSeed),
+    rows: r.worldSeed === prev.seed ? prev.rows : generateRows(r.worldSeed),
     frogRow: r.frogRow,
     maxRow: r.maxRow,
     multiplier: r.multiplier,
@@ -94,7 +94,6 @@ function applyServerRound(
   }
 
   if (data.doom) {
-    sfx.horn()
     patch.doom = { row: data.doom.row, kind: data.doom.kind, at: performance.now() / 1000 }
   }
 
@@ -255,9 +254,27 @@ export const useGame = create<GameState>((set, get) => ({
       phase: 'dead',
       deathKind: kind,
       fairRevealed: s.mode === 'casino' ? true : s.fairRevealed,
-      message: `${kind === 'drown' ? 'Splash!' : 'Splat!'} You lost ${s.bet.toFixed(2)} coins`,
+      message: `${kind === 'drown' ? 'Chomp!' : 'Splat!'} You lost ${s.bet.toFixed(2)} coins`,
       busy: false,
     })
+    // Settle server round so the next bet isn't blocked by an active round.
+    if (s.mode === 'casino' && s.token && s.roundId) {
+      void api
+        .forfeit(s.token, s.roundId, kind)
+        .then((res) => {
+          set({
+            balance: res.balance,
+            fairSeed: res.round.fairSeed ?? get().fairSeed,
+            fairHash: res.round.fairHash,
+            fairRevealed: true,
+            roundId: null,
+          })
+        })
+        .catch(() => {
+          // Server already settled it (doom roll) — just release the round.
+          set({ roundId: null })
+        })
+    }
   },
 
   cashOut: () => {

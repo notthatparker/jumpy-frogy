@@ -73,6 +73,12 @@ export const api = {
       token,
       body: JSON.stringify({ roundId }),
     }),
+  forfeit: (token: string, roundId: string, deathKind: 'hit' | 'drown') =>
+    req<{ balance: number; round: RoundPublic }>('/api/round/forfeit', {
+      method: 'POST',
+      token,
+      body: JSON.stringify({ roundId, deathKind }),
+    }),
   refill: (token: string) =>
     req<{ balance: number; message: string }>('/api/demo/refill', {
       method: 'POST',

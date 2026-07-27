@@ -20,6 +20,11 @@ export interface Row {
   count: number
   offset: number
   span: number
+  /** Seconds after the frog lands before a mower sweeps (grass only). 0 = none. */
+  mowerDelay?: number
+  /** Ambush alligators lurking in water lanes (0 = safe lane). */
+  gatorCount?: number
+  gatorLen?: number
 }
 
 export type DeathKind = 'hit' | 'drown'
@@ -34,11 +39,25 @@ export function mulberry32(a: number) {
   }
 }
 
-const GRASS: Row = { kind: 'grass', dir: 1, speed: 0, carLen: 0, period: 0, count: 0, offset: 0, span: 0 }
+function grass(i: number, rnd: () => number): Row {
+  // Starting strip stays safe; every later grass strip gets a timed mower.
+  const hasMower = i > 1
+  return {
+    kind: 'grass',
+    dir: rnd() < 0.5 ? 1 : -1,
+    speed: hasMower ? 5.5 + rnd() * 2.5 : 0,
+    carLen: hasMower ? 1.55 : 0,
+    period: 0,
+    count: hasMower ? 1 : 0,
+    offset: rnd(),
+    span: 0,
+    mowerDelay: hasMower ? 1.3 + rnd() * 2.7 : 0,
+  }
+}
 
 export function generateRows(seed: number, count = ROW_COUNT): Row[] {
   const rnd = mulberry32(seed)
-  const rows: Row[] = [GRASS, GRASS]
+  const rows: Row[] = [grass(0, rnd), grass(1, rnd)]
 
   const road = (i: number): Row => {
     const speed = 1.6 + rnd() * 1.6 + Math.min(2.4, i * 0.014)
@@ -64,6 +83,8 @@ export function generateRows(seed: number, count = ROW_COUNT): Row[] {
     const gap = 1.5 + rnd() * 1.1
     const period = carLen + gap
     const n = Math.max(2, Math.round(20 / period))
+    // Most water lanes hide an ambush gator; some are safe to linger on.
+    const gatorCount = rnd() < 0.8 ? 1 : 0
     return {
       kind: 'water',
       dir: rnd() < 0.5 ? 1 : -1,
@@ -73,6 +94,8 @@ export function generateRows(seed: number, count = ROW_COUNT): Row[] {
       count: n,
       offset: rnd(),
       span: n * period,
+      gatorCount,
+      gatorLen: 1.15 + rnd() * 0.35,
     }
   }
 
@@ -85,8 +108,8 @@ export function generateRows(seed: number, count = ROW_COUNT): Row[] {
       const run = 1 + Math.floor(rnd() * 3)
       for (let k = 0; k < run && rows.length < count; k++) rows.push(road(rows.length))
     }
-    rows.push(GRASS)
-    if (rnd() < 0.3) rows.push(GRASS)
+    rows.push(grass(rows.length, rnd))
+    if (rnd() < 0.3) rows.push(grass(rows.length, rnd))
   }
   return rows
 }

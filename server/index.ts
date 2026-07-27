@@ -15,6 +15,7 @@ import { saveNow } from './db.ts'
 import {
   advanceRound,
   cashOutRound,
+  forfeitRound,
   historyFor,
   refill,
   sessionFromToken,
@@ -106,6 +107,19 @@ app.post('/api/round/cashout', (req, res) => {
     balance: result.player.balance,
     round: result.round,
     payout: result.payout,
+  })
+})
+
+app.post('/api/round/forfeit', (req, res) => {
+  const token = tokenOf(req)
+  if (!token) return res.status(401).json({ error: 'missing_token' })
+  const roundId = String(req.body?.roundId || '')
+  const deathKind = req.body?.deathKind === 'drown' ? 'drown' : 'hit'
+  const result = forfeitRound(token, roundId, deathKind)
+  if ('error' in result) return res.status(result.status).json(result)
+  res.json({
+    balance: result.player.balance,
+    round: result.round,
   })
 })
 

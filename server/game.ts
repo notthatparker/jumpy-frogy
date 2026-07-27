@@ -64,8 +64,16 @@ export function startRound(token: string, betRaw: number) {
   const player = getPlayerByToken(token)
   if (!player) return { error: 'invalid_session', status: 401 as const }
 
+  // A lingering active round (page reload, client-side death that never
+  // settled) would block the player forever — forfeit it and move on.
   const active = getActiveRound(player.id)
-  if (active) return { error: 'round_already_active', status: 409 as const, round: publicRound(active, false) }
+  if (active) {
+    active.status = 'dead'
+    active.deathKind = active.deathKind ?? 'hit'
+    active.payout = 0
+    active.settledAt = new Date().toISOString()
+    saveRound(active)
+  }
 
   const bet = clampBet(betRaw)
   if (bet > player.balance) return { error: 'insufficient_balance', status: 400 as const }
@@ -199,6 +207,27 @@ export function cashOutRound(token: string, roundId: string) {
     player,
     round: publicRound(round, true),
     payout,
+  }
+}
+
+/** Client-side hazard (mower / alligator) — settle the round as a loss. */
+export function forfeitRound(token: string, roundId: string, deathKind: DeathKind = 'hit') {
+  const player = getPlayerByToken(token)
+  if (!player) return { error: 'invalid_session', status: 401 as const }
+
+  const round = getRound(roundId)
+  if (!round || round.playerId !== player.id) return { error: 'round_not_found', status: 404 as const }
+  if (round.status !== 'active') return { error: 'round_not_active', status: 409 as const, round: publicRound(round, true) }
+
+  round.status = 'dead'
+  round.deathKind = deathKind
+  round.payout = 0
+  round.settledAt = new Date().toISOString()
+  saveRound(round)
+
+  return {
+    player,
+    round: publicRound(round, true),
   }
 }
 
