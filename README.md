@@ -34,19 +34,50 @@ npm start
 Opens the API and serves the built frontend from the same origin on port 8787
 (or `$PORT`).
 
+| Path | What |
+|------|------|
+| `/` | Game (casino + arcade) |
+| `/admin` | Operator dashboard — live stats, RTP, bet limits, kill-switch |
+
+## Share a live demo with a partner (recommended)
+
+**Best option: [Render](https://render.com)** — one free web service, stable URL, game +
+admin on the same origin. A Cloudflare tunnel is fine for 10 minutes; it dies
+when your laptop sleeps. GitHub alone only shares source, not a running server.
+
+### One-click deploy from this repo
+
+1. Open: [Deploy to Render](https://render.com/deploy?repo=https://github.com/notthatparker/jumpy-frogy)
+2. Sign in (GitHub) → create the `jumpy-frogy` Blueprint service
+3. Wait for the first build (~2–3 min)
+4. Send your partner:
+   - **Game:** `https://jumpy-frogy.onrender.com/`
+   - **Admin:** `https://jumpy-frogy.onrender.com/admin`
+
+(Exact hostname appears in the Render dashboard after deploy.)
+
+**Notes for the free plan**
+
+- First visit after idle can take ~30s (cold start)
+- Demo data lives on the instance disk and resets on redeploy — fine for demos
+- `/admin` has no login yet — only share the URL with people you trust
+
 ## Casino API
 
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET | `/api/health` | Liveness |
-| GET | `/api/config` | RTP, bet limits |
+| GET | `/api/config` | Live RTP, bet limits, kill-switch |
 | POST | `/api/session` | Create / resume demo player |
 | POST | `/api/round/start` | Debit bet, return `fairHash` + `worldSeed` |
 | POST | `/api/round/advance` | Authoritative hop / lane roll |
 | POST | `/api/round/cashout` | Pay win, reveal seed |
+| POST | `/api/round/forfeit` | Settle client-side hazard death |
 | GET | `/api/history` | Recent settled rounds |
 | POST | `/api/demo/refill` | Refill demo balance |
 | POST | `/api/fair/verify` | Check seed matches hash |
+| GET | `/api/admin/stats` | Operator dashboard data |
+| GET/PUT | `/api/admin/settings` | Operator economics (RTP, bets, etc.) |
 
 Auth: `Authorization: Bearer <session-token>` (issued by `/api/session`).
 

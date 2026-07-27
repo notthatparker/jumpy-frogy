@@ -3,10 +3,13 @@ services:
     name: jumpy-frogy
     runtime: node
     plan: free
+    region: oregon
     buildCommand: npm ci && npm run build
     startCommand: npm start
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
+      # Render sets PORT automatically; keep a fallback for local Docker.
       - key: PORT
         value: 10000
