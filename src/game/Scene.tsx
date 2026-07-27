@@ -5,6 +5,18 @@ import * as THREE from 'three'
 import { useGame } from './store'
 import { sfx } from './sfx'
 import { ROW_D, PLAY_HALF, carX, rowRng, type Row } from './world'
+import {
+  barkTexture,
+  drift,
+  foliageTexture,
+  frogSkinTexture,
+  gatorSkinTexture,
+  grassTexture,
+  groundTexture,
+  paintedMetalTexture,
+  roadTexture,
+  waterTexture,
+} from './textures'
 
 const CAR_COLORS = ['#f28b82', '#aecbfa', '#fdd663', '#ccff90', '#d7aefb', '#ffb3c1', '#a7ffeb']
 const TREE_GREENS = ['#7ecb6f', '#5fb85a', '#96d98a']
@@ -103,7 +115,13 @@ function GrassRow({ i, seed }: { i: number; seed: number }) {
     <group position={[0, 0, i * ROW_D]}>
       <mesh receiveShadow position={[0, -0.1, 0]}>
         <boxGeometry args={[34, 0.2, ROW_D]} />
-        <meshStandardMaterial color={i % 2 === 0 ? '#8fd47f' : '#84cc74'} />
+        <meshStandardMaterial
+          color={i % 2 === 0 ? '#8fd47f' : '#84cc74'}
+          map={grassTexture()}
+          bumpMap={grassTexture()}
+          bumpScale={0.4}
+          roughness={0.95}
+        />
       </mesh>
       {decos.map((d, k) =>
         d.kind === 'flower' ? (
@@ -121,21 +139,21 @@ function GrassRow({ i, seed }: { i: number; seed: number }) {
           <group key={k} position={[d.x, 0, 0]} scale={d.s}>
             <mesh castShadow position={[0, 0.35, 0]}>
               <cylinderGeometry args={[0.13, 0.18, 0.7, 8]} />
-              <meshStandardMaterial color="#a1795a" />
+              <meshStandardMaterial color="#a1795a" map={barkTexture()} bumpMap={barkTexture()} bumpScale={0.4} />
             </mesh>
             <mesh castShadow position={[0, 0.95, 0]}>
               <sphereGeometry args={[0.55, 12, 12]} />
-              <meshStandardMaterial color={TREE_GREENS[(i + k) % TREE_GREENS.length]} />
+              <meshStandardMaterial color={TREE_GREENS[(i + k) % TREE_GREENS.length]} map={foliageTexture()} />
             </mesh>
             <mesh castShadow position={[0.3, 0.75, 0.1]}>
               <sphereGeometry args={[0.35, 10, 10]} />
-              <meshStandardMaterial color={TREE_GREENS[(i + k + 1) % TREE_GREENS.length]} />
+              <meshStandardMaterial color={TREE_GREENS[(i + k + 1) % TREE_GREENS.length]} map={foliageTexture()} />
             </mesh>
           </group>
         ) : (
           <mesh key={k} castShadow position={[d.x, 0.2, 0]} scale={[d.s, d.s * 0.7, d.s]}>
             <sphereGeometry args={[0.4, 10, 10]} />
-            <meshStandardMaterial color={TREE_GREENS[(i + k) % TREE_GREENS.length]} />
+            <meshStandardMaterial color={TREE_GREENS[(i + k) % TREE_GREENS.length]} map={foliageTexture()} />
           </mesh>
         ),
       )}
@@ -148,7 +166,13 @@ function RoadRow({ i, hasRoadAhead }: { i: number; hasRoadAhead: boolean }) {
     <group position={[0, 0, i * ROW_D]}>
       <mesh receiveShadow position={[0, -0.11, 0]}>
         <boxGeometry args={[34, 0.2, ROW_D]} />
-        <meshStandardMaterial color="#a9b2bd" />
+        <meshStandardMaterial
+          color="#a9b2bd"
+          map={roadTexture()}
+          bumpMap={roadTexture()}
+          bumpScale={0.25}
+          roughness={0.9}
+        />
       </mesh>
       {hasRoadAhead &&
         [-8, -5, -2, 1, 4, 7].map((x) => (
@@ -170,16 +194,30 @@ function WaterRow({ i, seed }: { i: number; seed: number }) {
     return items
   }, [i, seed])
 
+  // Each lane gets its own caustics offset so currents don't move in lockstep.
+  const { tex, flow } = useMemo(() => {
+    const rng = rowRng(seed, i * 17 + 3)
+    const t = drift(waterTexture())
+    t.offset.set(rng(), rng())
+    return { tex: t, flow: rng() < 0.5 ? 1 : -1 }
+  }, [i, seed])
+
+  useFrame((_, dt) => {
+    const d = Math.min(dt, 0.05)
+    tex.offset.x += d * 0.035 * flow
+    tex.offset.y += d * 0.012
+  })
+
   return (
     <group position={[0, 0, i * ROW_D]}>
       <mesh receiveShadow position={[0, -0.14, 0]}>
         <boxGeometry args={[34, 0.2, ROW_D]} />
-        <meshStandardMaterial color="#6fc7e8" />
+        <meshStandardMaterial color="#7ed0ef" map={tex} roughness={0.32} metalness={0.06} />
       </mesh>
       {pads.map((x, k) => (
         <mesh key={k} position={[x, -0.02, 0]}>
           <cylinderGeometry args={[0.3, 0.3, 0.05, 12]} />
-          <meshStandardMaterial color="#79d071" />
+          <meshStandardMaterial color="#79d071" map={grassTexture()} />
         </mesh>
       ))}
     </group>
@@ -212,7 +250,13 @@ function Car({ len, color }: { len: number; color: string }) {
 function Log({ len }: { len: number }) {
   return (
     <RoundedBox castShadow args={[len * 0.92, 0.26, 0.66]} radius={0.13} smoothness={3} position={[0, 0.04, 0]}>
-      <meshStandardMaterial color="#a8795a" />
+      <meshStandardMaterial
+        color="#a8795a"
+        map={barkTexture()}
+        bumpMap={barkTexture()}
+        bumpScale={0.5}
+        roughness={0.85}
+      />
     </RoundedBox>
   )
 }
@@ -226,7 +270,7 @@ function MowerMesh() {
     <group>
       {/* cutting deck */}
       <RoundedBox castShadow args={[1.35, 0.18, 0.95]} radius={0.08} smoothness={3} position={[0, 0.22, 0]}>
-        <meshStandardMaterial color="#3d9b4a" />
+        <meshStandardMaterial color="#3d9b4a" map={paintedMetalTexture()} roughness={0.55} metalness={0.15} />
       </RoundedBox>
       {/* deck lip / skirt */}
       <RoundedBox args={[1.4, 0.08, 1.0]} radius={0.04} smoothness={2} position={[0, 0.12, 0]}>
@@ -298,7 +342,13 @@ function AlligatorMesh({ len, jawRef }: { len: number; jawRef: RefObject<THREE.G
     <group>
       {/* torso */}
       <RoundedBox castShadow args={[L * 0.5, 0.26, 0.56]} radius={0.1} smoothness={3} position={[0, 0.13, 0]}>
-        <meshStandardMaterial color={hide} />
+        <meshStandardMaterial
+          color={hide}
+          map={gatorSkinTexture()}
+          bumpMap={gatorSkinTexture()}
+          bumpScale={0.6}
+          roughness={0.8}
+        />
       </RoundedBox>
       {/* two rows of back scutes */}
       {[-0.11, 0.11].map((z) =>
@@ -311,7 +361,7 @@ function AlligatorMesh({ len, jawRef }: { len: number; jawRef: RefObject<THREE.G
       )}
       {/* head */}
       <RoundedBox castShadow args={[L * 0.2, 0.2, 0.46]} radius={0.07} smoothness={3} position={[L * 0.3, 0.14, 0]}>
-        <meshStandardMaterial color={hide} />
+        <meshStandardMaterial color={hide} map={gatorSkinTexture()} roughness={0.8} />
       </RoundedBox>
       {/* eye bumps peeking above the water */}
       {[-0.14, 0.14].map((z) => (
@@ -343,7 +393,7 @@ function AlligatorMesh({ len, jawRef }: { len: number; jawRef: RefObject<THREE.G
       {/* upper snout — hinges open at the head */}
       <group ref={jawRef} position={[L * 0.38, 0.17, 0]}>
         <RoundedBox castShadow args={[L * 0.36, 0.1, 0.36]} radius={0.05} smoothness={2} position={[L * 0.16, 0, 0]}>
-          <meshStandardMaterial color={hide} />
+          <meshStandardMaterial color={hide} map={gatorSkinTexture()} roughness={0.8} />
         </RoundedBox>
         {[-0.07, 0.07].map((z) => (
           <mesh key={z} position={[L * 0.32, 0.055, z]}>
@@ -354,10 +404,10 @@ function AlligatorMesh({ len, jawRef }: { len: number; jawRef: RefObject<THREE.G
       </group>
       {/* tapering tail with a curve */}
       <RoundedBox castShadow args={[L * 0.24, 0.2, 0.42]} radius={0.08} smoothness={2} position={[-L * 0.34, 0.11, 0.02]} rotation={[0, 0.12, 0]}>
-        <meshStandardMaterial color={hide} />
+        <meshStandardMaterial color={hide} map={gatorSkinTexture()} roughness={0.8} />
       </RoundedBox>
       <RoundedBox castShadow args={[L * 0.2, 0.14, 0.28]} radius={0.06} smoothness={2} position={[-L * 0.5, 0.09, 0.07]} rotation={[0, 0.3, 0]}>
-        <meshStandardMaterial color={dark} />
+        <meshStandardMaterial color={dark} map={gatorSkinTexture()} roughness={0.8} />
       </RoundedBox>
       <mesh castShadow position={[-L * 0.64, 0.08, 0.13]} rotation={[0, 0.45, Math.PI / 2]}>
         <coneGeometry args={[0.08, L * 0.2, 6]} />
@@ -1030,7 +1080,13 @@ function Frog() {
         {/* body */}
         <mesh castShadow position={[0, 0.32, 0]} scale={[1, 0.82, 1.1]}>
           <sphereGeometry args={[0.34, 16, 16]} />
-          <meshStandardMaterial color="#79c860" />
+          <meshStandardMaterial
+            color="#79c860"
+            map={frogSkinTexture()}
+            bumpMap={frogSkinTexture()}
+            bumpScale={0.25}
+            roughness={0.7}
+          />
         </mesh>
         {/* belly */}
         <mesh position={[0, 0.24, 0.12]} scale={[0.8, 0.6, 0.8]}>
@@ -1096,7 +1152,7 @@ export function Scene() {
       {/* base plane under everything */}
       <mesh position={[0, -0.25, frogRow * ROW_D]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[80, 80]} />
-        <meshStandardMaterial color="#7cc46d" />
+        <meshStandardMaterial color="#7cc46d" map={groundTexture()} roughness={0.95} />
       </mesh>
 
       {visible.map(({ row, i }) =>
