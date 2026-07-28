@@ -35,6 +35,19 @@ export const MAX_BET = DEFAULT_SETTINGS.maxBet
 export const STARTING_BALANCE = DEFAULT_SETTINGS.startingBalance
 export const ROW_COUNT = 240
 
+/**
+ * Traffic loops around within this many world units. It must be at least as
+ * wide as the visible road strip (34) or cars visibly pop in and out of
+ * existence mid-lane as they wrap. Lane counts round *up* to this so the wrap
+ * point never lands back inside the strip.
+ */
+const LANE_SPAN = 34
+
+/** Cars per lane, rounded up so `count * period >= LANE_SPAN`. */
+function laneCount(period: number): number {
+  return Math.max(2, Math.ceil(LANE_SPAN / period))
+}
+
 export type RowKind = 'grass' | 'road' | 'water'
 
 export interface Row {
@@ -90,7 +103,7 @@ export function generateRows(seed: number, count = ROW_COUNT): Row[] {
     const carLen = 1.5 + rnd() * 0.8
     const gap = Math.max(1.8, 3.6 - i * 0.012 + rnd() * 1.4)
     const period = carLen + gap
-    const n = Math.max(2, Math.round(20 / period))
+    const n = laneCount(period)
     return {
       kind: 'road',
       dir: rnd() < 0.5 ? 1 : -1,
@@ -108,7 +121,7 @@ export function generateRows(seed: number, count = ROW_COUNT): Row[] {
     const carLen = 2.2 + rnd() * 1.1
     const gap = 1.5 + rnd() * 1.1
     const period = carLen + gap
-    const n = Math.max(2, Math.round(20 / period))
+    const n = laneCount(period)
     // Most water lanes hide an ambush gator; some are safe to linger on.
     const gatorCount = rnd() < 0.8 ? 1 : 0
     return {

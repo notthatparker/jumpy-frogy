@@ -9,6 +9,14 @@ import { ROW_D, PLAY_HALF, carX, rowRng, type Row } from './world'
 const CAR_COLORS = ['#f28b82', '#aecbfa', '#fdd663', '#ccff90', '#d7aefb', '#ffb3c1', '#a7ffeb']
 const TREE_GREENS = ['#7ecb6f', '#5fb85a', '#96d98a']
 
+/**
+ * Lateral offsets used when the losing-roll car charges. Cars are 0.72 deep and
+ * a lane is only 1.15, so the two sum to exactly one car depth: they pass
+ * touching side by side rather than clipping through one another.
+ */
+const DOOM_LEAN = 0.34
+const YIELD_LEAN = 0.38
+
 /** Frog world position, shared with traffic / hazard helpers. */
 const frogPos = { x: 0, y: 0, z: 0 }
 
@@ -628,6 +636,7 @@ function LaneTraffic({ row, i }: { row: Row; i: number }) {
     k: number
     x: number
     dir: number
+    side: number
     speed: number
     impacted: boolean
     horned: boolean
@@ -663,6 +672,8 @@ function LaneTraffic({ row, i }: { row: Row; i: number }) {
           // Lock the charge direction now — recomputing it every frame makes
           // the car jitter back and forth over the frog after impact.
           dir: Math.sign(frogPos.x - startX) || row.dir,
+          // Side of the lane it overtakes on; traffic ahead yields the other way.
+          side: i % 2 === 0 ? 1 : -1,
           speed: row.speed * 1.15,
           impacted: false,
           horned: false,
@@ -682,6 +693,8 @@ function LaneTraffic({ row, i }: { row: Row; i: number }) {
       game.frogRow === i &&
       !isDoomLane
 
+    const dtc = Math.min(dt, 0.05)
+
     for (let k = 0; k < g.children.length; k++) {
       const item = g.children[k]
       const run = doomRun.current
@@ -690,15 +703,25 @@ function LaneTraffic({ row, i }: { row: Row; i: number }) {
           run.horned = true
           sfx.horn()
         }
-        run.speed += 28 * Math.min(dt, 0.05)
-        run.x += run.dir * run.speed * Math.min(dt, 0.05)
+        // Cap the top speed: uncapped it eventually moves whole lanes per
+        // frame, which reads as the car blinking out instead of driving off.
+        if (!run.impacted) run.speed = Math.min(run.speed + 28 * dtc, 26)
+        run.x += run.dir * run.speed * dtc
         item.position.x = run.x
         item.position.y = 0
         item.rotation.y = run.dir === 1 ? 0 : Math.PI
+        // Hold one side of the lane for the whole charge. It still overlaps the
+        // frog at this offset, and never straightening means it stays clear of
+        // yielding traffic instead of merging back into it.
+        const lean = run.side * DOOM_LEAN
+        item.position.z = THREE.MathUtils.lerp(item.position.z, lean, 0.2)
+        item.rotation.x = THREE.MathUtils.lerp(item.rotation.x, -lean * 0.2, 0.2)
         // Nose-down lean while flooring it; relax once it has driven past.
         item.rotation.z = run.impacted
           ? THREE.MathUtils.lerp(item.rotation.z, 0, 0.1)
           : run.dir * -0.08
+        // Stop drawing it once it is well past the road edge.
+        item.visible = Math.abs(run.x) < 24
         if (!run.impacted && Math.abs(run.x - frogPos.x) < row.carLen / 2 + 0.35) {
           run.impacted = true
           spawnBurst(frogPos.x, frogPos.z, '#ffd9a0')
@@ -711,6 +734,20 @@ function LaneTraffic({ row, i }: { row: Row; i: number }) {
       const x = carX(row, k, t)
       item.position.x = x
       item.rotation.z = 0
+      item.visible = true
+
+      // Traffic in the charging car's path pulls aside, so it overtakes
+      // through a gap instead of clipping straight through another car.
+      let yieldZ = 0
+      if (run) {
+        const ahead = (x - run.x) * run.dir
+        // Hold the swerve until the bodies no longer overlap lengthwise,
+        // otherwise a car merges back while still alongside the charger.
+        if (ahead > -(row.carLen + 0.5) && ahead < 10) yieldZ = -run.side * YIELD_LEAN
+      }
+      item.position.z = THREE.MathUtils.lerp(item.position.z, yieldZ, 0.2)
+      item.rotation.x = THREE.MathUtils.lerp(item.rotation.x, -yieldZ * 0.25, 0.2)
+
       let targetY = 0
       if (overFrog) {
         const d = Math.abs(x - frogPos.x)
