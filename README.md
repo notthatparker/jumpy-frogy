@@ -39,28 +39,39 @@ Opens the API and serves the built frontend from the same origin on port 8787
 | `/` | Game (casino + arcade) |
 | `/admin` | Operator dashboard — live stats, RTP, bet limits, kill-switch |
 
-## Share a live demo with a partner (recommended)
+## Share a live demo with a partner
 
-**Best option: [Render](https://render.com)** — one free web service, stable URL, game +
-admin on the same origin. A Cloudflare tunnel is fine for 10 minutes; it dies
-when your laptop sleeps. GitHub alone only shares source, not a running server.
+Only a real deploy gives a link that works when your laptop is closed. The
+game and the dashboard both need the Node server, so they must be hosted
+together on one origin.
 
-### One-click deploy from this repo
+| Option | Laptop off? | Game | `/admin` | Stable URL |
+|--------|-------------|------|----------|------------|
+| **Render** (recommended) | yes | yes | yes | yes |
+| GitHub Pages | yes | static build only, no backend | no | yes |
+| Cloudflare quick tunnel | **no** | yes | yes | **no** |
+
+Do not share a `trycloudflare.com` link. It proxies to `localhost`, so it dies
+with your laptop, and the hostname is randomised on every restart — a stale one
+fails with `NXDOMAIN`.
+
+### Deploy to Render
 
 1. Open: [Deploy to Render](https://render.com/deploy?repo=https://github.com/notthatparker/jumpy-frogy)
-2. Sign in (GitHub) → create the `jumpy-frogy` Blueprint service
+2. Sign in with GitHub → create the `jumpy-frogy` Blueprint service
 3. Wait for the first build (~2–3 min)
-4. Send your partner:
-   - **Game:** `https://jumpy-frogy.onrender.com/`
-   - **Admin:** `https://jumpy-frogy.onrender.com/admin`
+4. Copy the service URL from the dashboard, then share `<url>/` and `<url>/admin`
 
-(Exact hostname appears in the Render dashboard after deploy.)
+Render appends a suffix when the name is taken, so the hostname is only known
+once the service exists — read it off the dashboard rather than assuming it.
 
 **Notes for the free plan**
 
 - First visit after idle can take ~30s (cold start)
 - Demo data lives on the instance disk and resets on redeploy — fine for demos
 - `/admin` has no login yet — only share the URL with people you trust
+- `buildCommand` must keep `--include=dev`: `NODE_ENV=production` makes a bare
+  `npm ci` drop `vite` and `typescript`, and the build fails with `tsc: not found`
 
 ## Casino API
 

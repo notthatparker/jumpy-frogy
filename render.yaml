@@ -4,7 +4,9 @@ services:
     runtime: node
     plan: free
     region: oregon
-    buildCommand: npm ci && npm run build
+    # --include=dev is required: NODE_ENV=production below makes a bare
+    # `npm ci` skip devDependencies, and the build needs tsc and vite.
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
